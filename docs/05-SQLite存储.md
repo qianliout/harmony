@@ -202,7 +202,7 @@ func (d *Date) Scan(src any) error {
 | `book/store/store.go` 合并时写 `merged_at` | `gorm.Expr("NOW(3)")` | `time.Now()` |
 | `book/store`、`record/store` 的 `LockBooks`、`LockRecords` | `clause.Locking{Strength: "UPDATE"}` | 删除锁子句，改为普通查询 |
 
-关于最后一项：SQLite 没有行锁，也不支持 `SELECT ... FOR UPDATE` 语法，保留锁子句要么报语法错误、要么被驱动静默丢弃，两种情况都不能提供保护。并发安全改由 `_txlock=immediate` 保证：事务开始时就持有整库写锁，同一时刻只有一个写事务在执行，原来靠行锁防止的"并发重复合并""并发重复还礼"自然不会发生。删除锁子句是为了不让读代码的人误以为还有行锁，方法名改为 `GetBooksInTx`、`GetRecordsInTx`，注释写明依赖写事务串行。
+关于最后一项：SQLite 没有行锁，也不支持 `SELECT ... FOR UPDATE` 语法，保留锁子句要么报语法错误、要么被驱动静默丢弃，两种情况都不能提供保护。并发安全改由 `_txlock=immediate` 保证：事务开始时就持有整库写锁，同一时刻只有一个写事务在执行，原来靠行锁防止的"并发重复合并""并发重复回礼"自然不会发生。删除锁子句是为了不让读代码的人误以为还有行锁，方法名改为 `GetBooksInTx`、`GetRecordsInTx`，注释写明依赖写事务串行。
 
 `paper_page_check` 的 upsert（识别批量写入时调用）用 GORM 的 `clause.OnConflict`，不手写 SQL：
 
@@ -239,7 +239,7 @@ MySQL 的 `utf8mb4_0900_ai_ci` 不区分大小写；SQLite 的 `LIKE` 默认只�
 | 用例 | 断言 |
 | --- | --- |
 | 日期边界 | 记录日期 2011-10-31，查询 `to=2011-10-31` 能查到；查询 `from=2011-11-01` 查不到 |
-| 并发写 | 10 个 goroutine 同时对同一条收礼记录发起还礼，最终只有一条成功把状态改为已还，其余返回 409，没有 `database is locked` 错误 |
+| 并发写 | 10 个 goroutine 同时对同一条收礼记录发起回礼，最终只有一条成功把状态改为已回礼，其余返回 409，没有 `database is locked` 错误 |
 
 ## 现有数据
 

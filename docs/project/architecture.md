@@ -64,8 +64,8 @@ index.html → src/main.ts（createSSRApp + Pinia）→ src/pages.json 声明的
 | 本子 | `component/book` | `pages/book`、`sub-book/*` | 本子增删改查、合并 |
 | 人 | `component/person` | `pages/person`、`sub-person/*` | 人增删改查、跨本子时间线 |
 | 事项 | `component/event` | `sub-event/*` | 事项增删改查、按人聚合 |
-| 记录与还礼 | `component/record` | `sub-record/*` | 记账、连续录入、还礼关联 |
-| 待还与统计 | `component/ledger` | `sub-misc/pending`、`sub-misc/stats` | 待还清单、按年/人/事项/本子统计 |
+| 记录与回礼 | `component/record` | `sub-record/*` | 记账、连续录入、回礼关联 |
+| 未回礼与统计 | `component/ledger` | `sub-misc/pending`、`sub-misc/stats` | 回礼清单、按年/人/事项/本子统计 |
 | 图片识别 | `component/recognition` | `sub-recognize/*`（仅 H5） | 上传、识别、核对、批量写入 |
 
 新增业务时先建 model 与建表 SQL，再按 store、service、api、前端页面的顺序落地。

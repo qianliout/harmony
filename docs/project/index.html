@@ -163,7 +163,7 @@ p.doc { text-align: center; color: var(--c-ink-2); font-size: 14px; margin: 8px 
 .expand { background: #FCFAF7; padding: 4px 16px 8px 68px; box-shadow: inset 0 1px 0 var(--c-divider); }
 .expand div { display: flex; justify-content: space-between; height: 30px; align-items: center; font-size: 13px; color: var(--c-ink-2); }
 
-/* 待还 */
+/* 未回礼 */
 .ptabs { display: flex; background: var(--c-fill); border-radius: 12px; padding: 3px; height: 40px; margin: 4px 0 14px; }
 .ptabs div { flex: 1; display: flex; align-items: center; justify-content: center; font-size: 14px; color: var(--c-ink-2); border-radius: 10px; }
 .ptabs .on { background: var(--c-surface); color: var(--c-ink-1); font-weight: 600; box-shadow: 0 1px 4px rgba(74,50,30,.1); }
@@ -303,22 +303,22 @@ table.rt tr.sub td { background: #FCFAF7; padding-top: 4px; padding-bottom: 8px;
         <div><div class="lbl">收礼</div><div class="money"><small>¥</small>3.26万</div></div>
         <div><div class="lbl">送礼</div><div class="money"><small>¥</small>2.80万</div></div>
       </div>
-      <div class="foot"><span>待还 12 笔 · <span class="money"><small>¥</small>8,600</span></span><span>›</span></div>
+      <div class="foot"><span>未回礼 12 笔 · <span class="money"><small>¥</small>8,600</span></span><span>›</span></div>
     </div>
     <div style="display:flex;gap:10px;margin-top:14px">
       <div class="btn pri" style="flex:2">＋ 记一笔</div>
       <div class="btn sec" style="flex:1">连续录入</div>
     </div>
     <div class="grid">
-      <div class="g"><span class="badge">12</span><div class="ic c-amber">还</div>待还</div>
+      <div class="g"><span class="badge">12</span><div class="ic c-amber">回</div>未回礼</div>
       <div class="g"><div class="ic c-cinnabar">喜</div>事项</div>
       <div class="g"><div class="ic c-teal">统</div>统计</div>
       <div class="g"><div class="ic c-indigo">识</div>识别礼簿</div>
     </div>
     <div class="sect"><h3>最近记录</h3><a>全部 ›</a></div>
     <div class="card">
-      <div class="row pending"><div class="av c-cinnabar">张</div><div class="grow"><div class="name">张三 <span class="tag rel">亲戚</span></div><div class="sub">小明升学宴 · 8月16日</div></div><div class="right"><span class="money in" style="font-size:17px"><small>¥</small>500</span><span class="pill p">待还</span></div></div>
-      <div class="row"><div class="av c-teal">李</div><div class="grow"><div class="name">李四 <span class="tag rel">同事</span></div><div class="sub">王家婚宴 · 10月1日</div></div><div class="right"><span class="money out" style="font-size:17px"><small>¥</small>800</span><span class="pill n">无需还</span></div></div>
+      <div class="row pending"><div class="av c-cinnabar">张</div><div class="grow"><div class="name">张三 <span class="tag rel">亲戚</span></div><div class="sub">小明升学宴 · 8月16日</div></div><div class="right"><span class="money in" style="font-size:17px"><small>¥</small>500</span><span class="pill p">未回礼</span></div></div>
+      <div class="row"><div class="av c-teal">李</div><div class="grow"><div class="name">李四 <span class="tag rel">同事</span></div><div class="sub">王家婚宴 · 10月1日</div></div><div class="right"><span class="money out" style="font-size:17px"><small>¥</small>800</span><span class="tag out">回礼</span></div></div>
     </div>
   </div>
   <div class="tabbar"><div class="tab on"><i></i>首页</div><div class="tab"><i></i>亲友</div><div class="tab"><i></i>礼簿</div><div class="tab"><i></i>我的</div></div>
@@ -340,7 +340,7 @@ table.rt tr.sub td { background: #FCFAF7; padding-top: 4px; padding-bottom: 8px;
       <div class="f"><span class="k">事项</span><span class="v"><span class="seal s c-indigo">学</span>小明升学宴 <span class="cap">· 礼簿默认</span></span><span class="arrow">›</span></div>
       <div class="f"><span class="k">礼簿</span><span class="v"><span class="chips"><span class="chip on" style="height:30px"><span class="dot" style="background:#C8372D"></span>2024 人情礼簿</span><span class="chip" style="height:30px"><span class="dot" style="background:#C27C0E"></span>火炮簿</span></span></span></div>
       <div class="f"><span class="k">名目</span><span class="v">现金 <span class="cap">· 按礼簿推断</span></span><span class="arrow">▾</span></div>
-      <div class="f"><span class="k">状态</span><span class="v tri"><span class="pill p">待还</span><span class="pill" style="background:var(--c-fill);color:var(--c-ink-3)">已还</span><span class="pill" style="background:var(--c-fill);color:var(--c-ink-3)">无需还</span></span></div>
+      <div class="f"><span class="k">状态</span><span class="v tri"><span class="pill p">未回礼</span><span class="pill" style="background:var(--c-fill);color:var(--c-ink-3)">已回礼</span><span class="pill" style="background:var(--c-fill);color:var(--c-ink-3)">不用回</span></span></div>
     </div>
   </div>
   <div class="pad">
@@ -367,13 +367,13 @@ table.rt tr.sub td { background: #FCFAF7; padding-top: 4px; padding-bottom: 8px;
       <div><span class="cap">总收</span><span class="money in"><small>¥</small>650</span></div>
       <div><span class="cap">总送</span><span class="money out"><small>¥</small>120</span></div>
       <div><span class="cap">差额</span><span class="money">+<small>¥</small>530</span><span class="cap" style="display:block;margin:2px 0 0">收多送少</span></div>
-      <div><span class="cap">待还</span><span class="money pend">2 <small>笔</small></span></div>
+      <div><span class="cap">未回礼</span><span class="money pend">2 <small>笔</small></span></div>
     </div>
-    <div class="filterbar"><span class="chip flat on">全部</span><span class="chip flat">待还</span><span class="chip flat">收</span><span class="chip flat">送</span><span class="more">筛选 ⚲</span></div>
+    <div class="filterbar"><span class="chip flat on">全部</span><span class="chip flat">未回礼</span><span class="chip flat">收</span><span class="chip flat">送</span><span class="more">筛选 ⚲</span></div>
     <div class="card egroup">
       <div class="head"><span class="seal m c-indigo">学</span><div style="flex:1"><div class="t">小明升学宴 <span class="tag rel">他家办</span></div><div class="sub">2024 · 8月16日</div></div><span class="money in" style="font-size:17px"><small>¥</small>600</span></div>
-      <div class="line pending"><span class="tag in">收</span><span class="bk">现金 · 2024 人情礼簿</span><span class="money in"><small>¥</small>500</span><span class="pill p">待还</span></div>
-      <div class="line pending"><span class="tag in">收</span><span class="bk">火炮 · 火炮簿</span><span class="money in"><small>¥</small>100</span><span class="pill p">待还</span></div>
+      <div class="line pending"><span class="tag in">收</span><span class="bk">现金 · 2024 人情礼簿</span><span class="money in"><small>¥</small>500</span><span class="pill p">未回礼</span></div>
+      <div class="line pending"><span class="tag in">收</span><span class="bk">火炮 · 火炮簿</span><span class="money in"><small>¥</small>100</span><span class="pill p">未回礼</span></div>
       <div class="formula">人情礼 ¥500 + 火炮 ¥100 = <b>¥600</b></div>
     </div>
     <div class="card egroup">
@@ -384,11 +384,11 @@ table.rt tr.sub td { background: #FCFAF7; padding-top: 4px; padding-bottom: 8px;
     </div>
     <div class="card egroup">
       <div class="head"><span class="seal m c-cinnabar">喜</span><div style="flex:1"><div class="t">我家婚宴 <span class="tag rel">自家办</span></div><div class="sub">2010 · 5月2日</div></div><span class="money in" style="font-size:17px"><small>¥</small>50</span></div>
-      <div class="line" style="height:auto;padding:10px 16px;flex-wrap:wrap"><span class="tag in">收</span><span class="bk">现金 · 2010 婚宴礼簿 · 第 1-10 页</span><span class="money in"><small>¥</small>50</span><span class="pill r">已还</span>
+      <div class="line" style="height:auto;padding:10px 16px;flex-wrap:wrap"><span class="tag in">收</span><span class="bk">现金 · 2010 婚宴礼簿 · 第 1-10 页</span><span class="money in"><small>¥</small>50</span><span class="pill r">已回礼</span>
         <div class="noteline" style="width:100%;margin:6px 0 0 30px"><span class="zhu">注</span>11年国庆 孙女 100元 火炮20元</div></div>
     </div>
   </div>
-  <div class="bottom"><div class="btn sec" style="flex:1">还礼</div><div class="btn pri" style="flex:2">给张三记一笔</div></div>
+  <div class="bottom"><div class="btn sec" style="flex:1">回礼</div><div class="btn pri" style="flex:2">给张三记一笔</div></div>
 </div>
 </div>
 
@@ -404,7 +404,7 @@ table.rt tr.sub td { background: #FCFAF7; padding-top: 4px; padding-bottom: 8px;
       <div><span class="cap">总收</span><span class="money in"><small>¥</small>3.26万</span></div>
       <div><span class="cap">总送</span><span class="money out"><small>¥</small>1,200</span></div>
       <div><span class="cap">人数</span><span class="money">58</span></div>
-      <div><span class="cap">待还</span><span class="money pend">40</span></div>
+      <div><span class="cap">未回礼</span><span class="money pend">40</span></div>
     </div>
     <div class="tabs"><span class="on">来礼<i>58</i></span><span>回礼<i>3</i></span><span>未回<i>40</i></span></div>
     <div class="search">⌕ 在本事项中找人</div>
@@ -419,14 +419,14 @@ table.rt tr.sub td { background: #FCFAF7; padding-top: 4px; padding-bottom: 8px;
 </div>
 </div>
 
-<!-- 5 待还清单 -->
+<!-- 5 回礼清单 -->
 <div class="slot">
-<div class="slot-title"><b>05</b>待还清单</div>
+<div class="slot-title"><b>05</b>回礼清单</div>
 <div class="phone">
   <div class="status"><span>9:41</span><span>●●● ▮</span></div>
-  <div class="nav"><span class="l">‹</span>待还清单</div>
+  <div class="nav"><span class="l">‹</span>回礼清单</div>
   <div class="scroll">
-    <div class="ptabs"><div class="on">我欠别人</div><div>别人欠我</div></div>
+    <div class="ptabs"><div class="on">我该回的</div><div>该回我的</div></div>
     <div class="card psum"><div><div class="cap">共 9 人 · 12 笔</div><div class="money pend" style="margin-top:4px"><small>¥</small>8,600</div></div><span class="sub">最久远 ▾</span></div>
     <div class="card" style="margin-top:12px">
       <div class="row pending"><div class="av c-rose">刘</div><div class="grow"><div class="name">刘大伯 <span class="tag rel">亲戚</span></div><div class="sub">1 笔 · 最早 5 年前</div></div><div class="right"><span class="money pend" style="font-size:17px"><small>¥</small>1,000</span><span class="cap">›</span></div></div>
@@ -463,9 +463,9 @@ table.rt tr.sub td { background: #FCFAF7; padding-top: 4px; padding-bottom: 8px;
 </div>
 </div>
 
-<!-- 8 补录纸本还礼 -->
+<!-- 8 补录纸本回礼 -->
 <div class="slot">
-<div class="slot-title"><b>07</b>补录纸本还礼 · 一条标注含两次还礼</div>
+<div class="slot-title"><b>07</b>补录纸本回礼 · 一条标注含两次回礼</div>
 <div class="phone">
   <div class="status"><span>9:41</span><span>●●● ▮</span></div>
   <div class="nav"><span class="l">‹</span></div>
@@ -475,19 +475,18 @@ table.rt tr.sub td { background: #FCFAF7; padding-top: 4px; padding-bottom: 8px;
   <div class="mask"></div>
   <div class="sheet">
     <div class="grab"></div>
-    <div class="ttl">补录还礼 · 张光轩</div>
+    <div class="ttl">补录回礼 · 张光轩</div>
     <div class="sub" style="margin-top:2px">原记录 收 ¥50 · 第 1-10 页 第 6 行</div>
     <div class="notebox">10年8月1日 生日 500<br>11年正月 50</div>
     <div class="rtab"><span class="on">① 2010.8.1 · ¥500</span><span>② 2011.2 · ¥50</span><span>＋</span></div>
-    <div class="cap" style="margin-top:6px">识别到这条标注含 2 次还礼，逐次核对</div>
+    <div class="cap" style="margin-top:6px">识别到这条标注含 2 次回礼，逐次核对</div>
     <div class="fl"><span class="k">时间</span><span class="box">2010 ▾</span><span class="box">8月 ▾</span><span class="box">1日 ▾</span></div>
-    <div class="fl" style="flex-wrap:wrap"><span class="k"></span><span class="uprow"><span class="chip flat" style="height:26px;font-size:12px">正月</span><span class="chip flat" style="height:26px;font-size:12px">端午</span><span class="chip flat" style="height:26px;font-size:12px">中秋</span><span class="chip flat" style="height:26px;font-size:12px">国庆</span><span class="chip flat" style="height:26px;font-size:12px">腊月</span></span></div>
     <div class="fl"><span class="k">对方事项</span><span class="box" style="flex:1">生日</span><span class="seal s c-stone">礼</span></div>
     <div class="cap" style="margin:4px 0 0 66px">新建事项：张光轩家 · 生日（其他）</div>
     <div class="fl"><span class="k">现金</span><span class="box money out" style="flex:1;justify-content:flex-end">500</span></div>
     <div class="fl" style="color:var(--c-primary);font-size:13px"><span class="k"></span>＋ 添加名目</div>
-    <div class="fl" style="justify-content:space-between;margin-top:12px"><span><span class="cb on">✓</span> 同时把原记录标为已还</span><span>共 2 次 <span class="money out"><small>¥</small>550</span></span></div>
-    <div style="display:flex;gap:10px;margin-top:16px"><div class="btn sec" style="flex:1">只标记已还</div><div class="btn pri" style="flex:2">保存 2 次还礼</div></div>
+    <div class="fl" style="justify-content:space-between;margin-top:12px"><span><span class="cb on">✓</span> 同时把原记录标为已回礼</span><span>共 2 次 <span class="money out"><small>¥</small>550</span></span></div>
+    <div style="display:flex;gap:10px;margin-top:16px"><div class="btn sec" style="flex:1">只标记已回礼</div><div class="btn pri" style="flex:2">保存 2 次回礼</div></div>
   </div>
 </div>
 </div>
@@ -505,9 +504,9 @@ table.rt tr.sub td { background: #FCFAF7; padding-top: 4px; padding-bottom: 8px;
     <div class="card"><div class="row"><span class="seal m c-cinnabar">喜</span><div class="grow"><div class="name"><span class="hit">孙女</span> <span class="tag rel">李成文家办</span></div><div class="sub">2011年10月 约 · 送 ¥120</div></div><span class="cap">›</span></div></div>
     <div class="sect"><h3 style="font-size:15px">记录 · 标注与备注</h3><a>全部 3 ›</a></div>
     <div class="card">
-      <div class="row"><div class="av c-cinnabar">李</div><div class="grow"><div class="name">李成文 <span class="pill r">已还</span></div><div class="sub">2010 婚宴礼簿 · 第 1-10 页 第 1 行</div><div class="noteline"><span class="zhu">注</span>11年国庆 <span class="hit">孙女</span> 100元 火炮20元</div></div><div class="right"><span class="money in" style="font-size:17px"><small>¥</small>50</span></div></div>
-      <div class="row"><div class="av c-gold">王</div><div class="grow"><div class="name">王天荣 <span class="pill r">已还</span></div><div class="sub">2010 婚宴礼簿 · 第 1-10 页 第 12 行</div><div class="noteline"><span class="zhu">注</span>12年腊月 <span class="hit">孙女</span>满月 100</div></div><div class="right"><span class="money in" style="font-size:17px"><small>¥</small>100</span></div></div>
-      <div class="row"><div class="av c-teal">袁</div><div class="grow"><div class="name">袁炎光 <span class="pill p">待还</span></div><div class="sub">2010 婚宴礼簿 · 第 1-10 页 第 13 行</div><div class="noteline"><span class="zhu">注</span>备注：<span class="hit">孙女</span>同学家长</div></div><div class="right"><span class="money in" style="font-size:17px"><small>¥</small>100</span></div></div>
+      <div class="row"><div class="av c-cinnabar">李</div><div class="grow"><div class="name">李成文 <span class="pill r">已回礼</span></div><div class="sub">2010 婚宴礼簿 · 第 1-10 页 第 1 行</div><div class="noteline"><span class="zhu">注</span>11年国庆 <span class="hit">孙女</span> 100元 火炮20元</div></div><div class="right"><span class="money in" style="font-size:17px"><small>¥</small>50</span></div></div>
+      <div class="row"><div class="av c-gold">王</div><div class="grow"><div class="name">王天荣 <span class="pill r">已回礼</span></div><div class="sub">2010 婚宴礼簿 · 第 1-10 页 第 12 行</div><div class="noteline"><span class="zhu">注</span>12年腊月 <span class="hit">孙女</span>满月 100</div></div><div class="right"><span class="money in" style="font-size:17px"><small>¥</small>100</span></div></div>
+      <div class="row"><div class="av c-teal">袁</div><div class="grow"><div class="name">袁炎光 <span class="pill p">未回礼</span></div><div class="sub">2010 婚宴礼簿 · 第 1-10 页 第 13 行</div><div class="noteline"><span class="zhu">注</span>备注：<span class="hit">孙女</span>同学家长</div></div><div class="right"><span class="money in" style="font-size:17px"><small>¥</small>100</span></div></div>
     </div>
   </div>
 </div>
@@ -515,7 +514,7 @@ table.rt tr.sub td { background: #FCFAF7; padding-top: 4px; padding-bottom: 8px;
 
 <!-- 11 整理纸本标注 -->
 <div class="slot">
-<div class="slot-title"><b>09</b>整理纸本标注 · 连续录入后统一转还礼</div>
+<div class="slot-title"><b>09</b>整理纸本标注 · 连续录入后统一转回礼</div>
 <div class="phone">
   <div class="status"><span>9:41</span><span>●●● ▮</span></div>
   <div class="nav"><span class="l">‹</span>整理纸本标注<span class="r cap">6 条待整理</span></div>
@@ -555,20 +554,20 @@ table.rt tr.sub td { background: #FCFAF7; padding-top: 4px; padding-bottom: 8px;
       <table class="rt">
         <tr><th style="width:34px"></th><th style="width:30px">行</th><th style="width:80px">姓名</th><th style="width:110px">匹配</th><th style="width:96px">金额</th><th style="width:70px">名目</th><th>纸本标注</th></tr>
         <tr><td><span class="cb on">✓</span></td><td class="cap">1</td><td><div class="ti">李成文</div></td><td><span class="ms ok">已匹配 · 亲戚</span></td><td><div class="ti num">50</div></td><td><div class="ti">贺礼</div></td><td class="raw" style="color:var(--c-ink-2)">11年国庆 孙女 100元 火炮20元</td></tr>
-        <tr class="sub"><td></td><td></td><td colspan="5"><div class="repay"><span class="arrow">↳ 还礼</span>2011年10月 · 孙女 · 现金 ¥100 + 火炮 ¥20<span style="color:var(--c-primary)">修改</span><span style="margin-left:auto">一并补录</span><span class="sw"></span></div></td></tr>
+        <tr class="sub"><td></td><td></td><td colspan="5"><div class="repay"><span class="arrow">↳ 回礼</span>2011年10月 · 孙女 · 现金 ¥100 + 火炮 ¥20<span style="color:var(--c-primary)">修改</span><span style="margin-left:auto">一并补录</span><span class="sw"></span></div></td></tr>
         <tr><td><span class="cb on">✓</span></td><td class="cap">2</td><td><div class="ti">张俊</div></td><td><span class="ms new">将新建</span></td><td><div class="ti num">100</div></td><td><div class="ti">贺礼</div></td><td class="raw"></td></tr>
         <tr><td><span class="cb on">✓</span></td><td class="cap">3</td><td><div class="ti">张友良</div></td><td><span class="ms ok">已匹配 · 邻居</span></td><td><div class="ti num">300</div></td><td><div class="ti">贺礼</div></td><td class="raw"></td></tr>
         <tr class="hl"><td><span class="cb on">✓</span></td><td class="cap">4</td><td><div class="ti warn">张亚?</div><span class="need">待确认</span></td><td><span class="ms new">将新建</span></td><td><div class="ti num warn">50</div><div class="mis">大写 伍拾元 · 小写 30 · 已按大写</div></td><td><div class="ti">贺礼</div></td><td class="raw"></td></tr>
         <tr><td><span class="cb on">✓</span></td><td class="cap">5</td><td><div class="ti">张肆法</div></td><td><span class="ms ok">已匹配 · 朋友</span></td><td><div class="ti num">30</div></td><td><div class="ti">贺礼</div></td><td class="raw"></td></tr>
         <tr><td><span class="cb on">✓</span></td><td class="cap">6</td><td><div class="ti">张光轩</div></td><td><span class="ms ok">已匹配 · 亲戚</span></td><td><div class="ti num">50</div></td><td><div class="ti">贺礼</div></td><td class="raw" style="color:var(--c-ink-2)">10年8月1日 生日 500 / 11年正月 50</td></tr>
-        <tr class="sub"><td></td><td></td><td colspan="5"><div class="repay"><span class="arrow">↳ 还礼 ①</span>2010年8月1日 · 生日 · 现金 ¥500<span style="color:var(--c-primary)">修改</span><span style="margin-left:auto">一并补录</span><span class="sw"></span></div></td></tr>
-        <tr class="sub"><td></td><td></td><td colspan="5"><div class="repay"><span class="arrow">↳ 还礼 ②</span>2011年2月 约 · <span class="pend">事项未注明</span> · 现金 ¥50<span style="color:var(--c-primary)">修改</span><span style="margin-left:auto">一并补录</span><span class="sw"></span></div></td></tr>
+        <tr class="sub"><td></td><td></td><td colspan="5"><div class="repay"><span class="arrow">↳ 回礼 ①</span>2010年8月1日 · 生日 · 现金 ¥500<span style="color:var(--c-primary)">修改</span><span style="margin-left:auto">一并补录</span><span class="sw"></span></div></td></tr>
+        <tr class="sub"><td></td><td></td><td colspan="5"><div class="repay"><span class="arrow">↳ 回礼 ②</span>2011年2月 约 · <span class="pend">事项未注明</span> · 现金 ¥50<span style="color:var(--c-primary)">修改</span><span style="margin-left:auto">一并补录</span><span class="sw"></span></div></td></tr>
         <tr class="hl"><td><span class="cb on">✓</span></td><td class="cap">9</td><td><div class="ti">袁召平</div><span class="need">待确认</span></td><td><span class="ms ok">已匹配 · 同事</span></td><td><div class="ti num">30</div></td><td><div class="ti">贺礼</div></td><td class="raw" style="color:var(--c-ink-2)">11年腊月 办儿 50元</td></tr>
         <tr class="sub"><td></td><td></td><td colspan="5"><div class="repay" style="color:var(--c-pending)">⚠ 这条标注写在第 9、10 行之间，请确认归属<span class="moveh"><b>属于第 9 行 ✓</b><b>改挂到第 10 行</b></span></div></td></tr>
         <tr class="more-rows"><td colspan="7">第 7–8 行、第 10–15 行无需确认，已折叠 ▾</td></tr>
       </table>
       <div class="addrow">＋ 添加一行（照片不全或漏识别时手动补录）</div>
-      <div class="foot"><span class="hint">⚠ 还有 2 行待确认</span><div class="btn pri" style="opacity:.45">写入 15 条 · 补录还礼 7 次</div></div>
+      <div class="foot"><span class="hint">⚠ 还有 2 行待确认</span><div class="btn pri" style="opacity:.45">写入 15 条 · 补录回礼 7 次</div></div>
     </div>
   </div>
 </div>
