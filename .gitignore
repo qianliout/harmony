@@ -1,0 +1,22 @@
+# Go 构建产物与本地数据库
+backend/bin/
+backend/*.db
+backend/*.db-shm
+backend/*.db-wal
+
+# 前端依赖与构建产物
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+
+# 本地环境变量
+frontend/.env.local
+frontend/.env.*.local
+
+# 编辑器与系统
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+*.swp
+*.swo

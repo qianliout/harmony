@@ -1,0 +1,8 @@
+server:
+  port: 8080
+  mode: "debug"
+
+# 本机阶段用 SQLite 单文件库，启动目录即 backend/，数据落在 backend/harmony.db。
+database:
+  driver: "sqlite"
+  dsn: "harmony.db"

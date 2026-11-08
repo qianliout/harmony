@@ -1,0 +1,49 @@
+/* 全局基础样式：白色界面、单一主蓝、冷灰文本层级，覆盖 Element Plus 变量。 */
+:root {
+  --el-color-primary: #2468f2;
+  --el-color-primary-light-3: #4c87f5;
+  --el-color-primary-light-5: #7ba8f8;
+  --el-color-primary-light-7: #a9c9fb;
+  --el-color-primary-light-8: #c3d9fc;
+  --el-color-primary-light-9: #eef3fe;
+  --el-color-primary-dark-2: #1a50c4;
+
+  --el-text-color-primary: #1f2329;
+  --el-text-color-regular: #4e5969;
+  --el-text-color-secondary: #6b7785;
+  --el-text-color-placeholder: #6b7785;
+
+  --el-border-color: #e5e6eb;
+  --el-border-color-light: #f0f1f5;
+  --el-border-color-lighter: #f0f1f5;
+
+  --el-fill-color-lighter: #f7f8fa;
+  --el-fill-color-light: #f2f3f5;
+
+  --el-border-radius-base: 6px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family:
+    'PingFang SC', -apple-system, 'Helvetica Neue', 'Microsoft YaHei',
+    Arial, sans-serif;
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--el-text-color-primary);
+  background: var(--el-fill-color-lighter);
+  -webkit-font-smoothing: antialiased;
+}
