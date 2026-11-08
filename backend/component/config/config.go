@@ -11,8 +11,10 @@ import (
 )
 
 type Config struct {
-	Server   ServerConfig   `yaml:"server"`
-	Database DatabaseConfig `yaml:"database"`
+	Server    ServerConfig    `yaml:"server"`
+	Database  DatabaseConfig  `yaml:"database"`
+	Storage   StorageConfig   `yaml:"storage"`
+	Recognize RecognizeConfig `yaml:"recognize"`
 }
 
 type ServerConfig struct {
@@ -25,6 +27,19 @@ type DatabaseConfig struct {
 	DSN    string `yaml:"dsn"`
 }
 
+type StorageConfig struct {
+	UploadDir string `yaml:"uploadDir"`
+}
+
+type RecognizeConfig struct {
+	Provider       string  `yaml:"provider"`
+	BaseURL        string  `yaml:"baseURL"`
+	APIKey         string  `yaml:"apiKey"`
+	Model          string  `yaml:"model"`
+	TimeoutSeconds int64   `yaml:"timeoutSeconds"`
+	Temperature    float64 `yaml:"temperature"`
+}
+
 // Global 是全局配置，由 Load 填充。
 var Global = Default()
 
@@ -35,6 +50,14 @@ func Default() *Config {
 		Database: DatabaseConfig{
 			Driver: consts.DBDriverMySQL,
 			DSN:    "root:root@tcp(127.0.0.1:3306)/harmony?charset=utf8mb4&parseTime=True&loc=Local",
+		},
+		Storage: StorageConfig{UploadDir: "data/uploads"},
+		Recognize: RecognizeConfig{
+			Provider:       "deepseek",
+			BaseURL:        "https://api.deepseek.com/v1",
+			Model:          "deepseek-chat",
+			TimeoutSeconds: 60,
+			Temperature:    0,
 		},
 	}
 }
@@ -81,6 +104,12 @@ func (cfg *Config) Validate() error {
 	if cfg.Database.DSN == "" {
 		return fmt.Errorf("database dsn is empty")
 	}
+	if cfg.Storage.UploadDir == "" {
+		return fmt.Errorf("storage uploadDir is empty")
+	}
+	if cfg.Recognize.TimeoutSeconds <= 0 {
+		return fmt.Errorf("recognize timeoutSeconds must be positive")
+	}
 	return nil
 }
 
@@ -89,6 +118,16 @@ func applyEnv(cfg *Config) {
 	envStr("SERVER_MODE", &cfg.Server.Mode)
 	envStr("DATABASE_DRIVER", &cfg.Database.Driver)
 	envStr("DATABASE_DSN", &cfg.Database.DSN)
+	envStr("HARMONY_STORAGE_UPLOAD_DIR", &cfg.Storage.UploadDir)
+	envStr("HARMONY_RECOGNIZE_PROVIDER", &cfg.Recognize.Provider)
+	envStr("HARMONY_RECOGNIZE_BASE_URL", &cfg.Recognize.BaseURL)
+	envStr("HARMONY_RECOGNIZE_MODEL", &cfg.Recognize.Model)
+	envStr("HARMONY_RECOGNIZE_API_KEY", &cfg.Recognize.APIKey)
+	// 本机已有 DEEPSEEK_API_KEY 时直接复用，避免额外维护一份密钥。
+	if cfg.Recognize.APIKey == "" {
+		envStr("DEEPSEEK_API_KEY", &cfg.Recognize.APIKey)
+	}
+	envInt("HARMONY_RECOGNIZE_TIMEOUT_SECONDS", &cfg.Recognize.TimeoutSeconds)
 }
 
 func envStr(key string, dst *string) {

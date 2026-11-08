@@ -23,13 +23,15 @@ type Body struct {
 	Custom     map[string]any `json:"custom"`
 }
 
-// ErrI18 携带中英双语文案的错误。
+// ErrI18 携带中英双语文案的错误；Data/Custom 用于软确认与关联引用等结构化信息。
 type ErrI18 struct {
-	Code int64
-	Msg  string
-	Err  error
-	EN   string
-	ZH   string
+	Code   int64
+	Msg    string
+	Err    error
+	EN     string
+	ZH     string
+	Data   any
+	Custom map[string]any
 }
 
 func (e *ErrI18) Error() string {
@@ -102,6 +104,10 @@ func JsonErr(c *gin.Context, err error) {
 		body.Code = errI18.Code
 		body.Msg = errMsg(c, errI18)
 		body.Err = errI18.Error()
+		if errI18.Data != nil {
+			body.Data = errI18.Data
+		}
+		body.Custom = errI18.Custom
 	}
 	c.JSON(http.StatusOK, &body)
 }

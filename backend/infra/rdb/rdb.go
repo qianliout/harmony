@@ -47,6 +47,11 @@ func dialectorFor(driver, dsn string) (gorm.Dialector, error) {
 	}
 }
 
+// New 用已有连接构造 RDB；测试传入事务句柄后，嵌套的 Transaction 走 savepoint，随外层回滚。
+func New(db *gorm.DB, driver string) *RDB {
+	return &RDB{db: db, driver: driver}
+}
+
 func (r *RDB) Get() *gorm.DB {
 	return r.db
 }

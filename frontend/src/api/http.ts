@@ -18,6 +18,15 @@ function resolveTarget(): { baseURL: string; platform: string } {
 
 const { baseURL: BASE_URL, platform: PLATFORM } = resolveTarget()
 
+/** 导出、上传等需要自行拼 URL 的场景使用。 */
+export function apiBaseURL(): string {
+  return BASE_URL
+}
+
+export function queryString(query?: object): string {
+  return toQuery(query)
+}
+
 /** 业务错误：code 为后端业务码，网络失败时为 -1。 */
 export class ApiError extends Error {
   constructor(
@@ -72,8 +81,8 @@ export const http = {
   get<T>(url: string, query?: object) {
     return send<T>('GET', url, undefined, query)
   },
-  post<T>(url: string, data?: object) {
-    return send<T>('POST', url, data)
+  post<T>(url: string, data?: object, query?: object) {
+    return send<T>('POST', url, data, query)
   },
   put<T>(url: string, data?: object, query?: object) {
     return send<T>('PUT', url, data, query)

@@ -11,12 +11,119 @@
       "style": {
         "navigationBarTitleText": "人情往来账本"
       }
+    },
+    {
+      "path": "pages/person/list",
+      "style": {
+        "navigationBarTitleText": "亲友"
+      }
+    },
+    {
+      "path": "pages/book/list",
+      "style": {
+        "navigationBarTitleText": "礼簿"
+      }
+    },
+    {
+      "path": "pages/mine/index",
+      "style": {
+        "navigationBarTitleText": "我的"
+      }
     }
   ],
+  "subPackages": [
+    {
+      "root": "sub-person",
+      "pages": [
+        { "path": "detail", "style": { "navigationBarTitleText": "亲友详情" } },
+        { "path": "edit", "style": { "navigationBarTitleText": "亲友" } }
+      ]
+    },
+    {
+      "root": "sub-book",
+      "pages": [
+        { "path": "detail", "style": { "navigationBarTitleText": "礼簿详情", "enablePullDownRefresh": true } },
+        { "path": "edit", "style": { "navigationBarTitleText": "礼簿" } },
+        { "path": "merge", "style": { "navigationBarTitleText": "合并礼簿" } },
+        { "path": "merged", "style": { "navigationBarTitleText": "已合并的礼簿" } },
+        { "path": "pages", "style": { "navigationBarTitleText": "按页核对" } }
+      ]
+    },
+    {
+      "root": "sub-event",
+      "pages": [
+        { "path": "detail", "style": { "navigationBarTitleText": "事项详情" } },
+        { "path": "edit", "style": { "navigationBarTitleText": "事项" } }
+      ]
+    },
+    {
+      "root": "sub-record",
+      "pages": [
+        { "path": "form", "style": { "navigationBarTitleText": "记一笔" } },
+        { "path": "continuous", "style": { "navigationBarTitleText": "连续录入" } },
+        { "path": "detail", "style": { "navigationBarTitleText": "记录详情" } },
+        { "path": "list", "style": { "navigationBarTitleText": "全部记录", "enablePullDownRefresh": true } },
+        { "path": "notes", "style": { "navigationBarTitleText": "整理纸本标注" } }
+      ]
+    },
+    {
+      "root": "sub-misc",
+      "pages": [
+        { "path": "pending", "style": { "navigationBarTitleText": "待还清单" } },
+        { "path": "search", "style": { "navigationBarTitleText": "搜索" } },
+        { "path": "stats", "style": { "navigationBarTitleText": "统计" } },
+        { "path": "transfer", "style": { "navigationBarTitleText": "导入导出" } },
+        { "path": "settings", "style": { "navigationBarTitleText": "偏好设置" } }
+      ]
+    }
+    // #ifdef H5
+    ,
+    {
+      "root": "sub-recognize",
+      "pages": [
+        { "path": "index", "style": { "navigationBarTitleText": "识别礼簿" } }
+      ]
+    }
+    // #endif
+  ],
+  "tabBar": {
+    "color": "#968B83",
+    "selectedColor": "#C8372D",
+    "backgroundColor": "#FFFFFF",
+    "borderStyle": "white",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "首页",
+        "iconPath": "static/tabbar/home.png",
+        "selectedIconPath": "static/tabbar/home-active.png"
+      },
+      {
+        "pagePath": "pages/person/list",
+        "text": "亲友",
+        "iconPath": "static/tabbar/person.png",
+        "selectedIconPath": "static/tabbar/person-active.png"
+      },
+      {
+        "pagePath": "pages/book/list",
+        "text": "礼簿",
+        "iconPath": "static/tabbar/book.png",
+        "selectedIconPath": "static/tabbar/book-active.png"
+      },
+      {
+        "pagePath": "pages/mine/index",
+        "text": "我的",
+        "iconPath": "static/tabbar/mine.png",
+        "selectedIconPath": "static/tabbar/mine-active.png"
+      }
+    ]
+  },
   "globalStyle": {
+    "navigationStyle": "custom",
     "navigationBarTextStyle": "black",
     "navigationBarTitleText": "人情往来账本",
     "navigationBarBackgroundColor": "#F6F2EC",
-    "backgroundColor": "#F6F2EC"
+    "backgroundColor": "#F6F2EC",
+    "backgroundTextStyle": "dark"
   }
 }

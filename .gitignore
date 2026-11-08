@@ -20,3 +20,8 @@ frontend/.env.*.local
 .DS_Store
 *.swp
 *.swo
+
+# 上传的礼簿原图与 H5 交付产物
+backend/data/
+backend/web/dist/*
+!backend/web/dist/.keep
