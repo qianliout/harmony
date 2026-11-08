@@ -20,7 +20,9 @@ func NewViewAPI(srv *service.ViewSrv) *ViewAPI {
 func (a *ViewAPI) PersonTimeline(c *gin.Context) {
 	q := record.Query{
 		PersonID:  uint64(utils.GetInt64FromQuery(c, "personId")),
-		BookID:    uint64(utils.GetInt64FromQuery(c, "bookId")),
+		BookID:       uint64(utils.GetInt64FromQuery(c, "bookId")),
+		BookCategory: utils.GetStrFromQuery(c, "bookCategory"),
+		EventType:    utils.GetStrFromQuery(c, "eventType"),
 		EventID:   uint64(utils.GetInt64FromQuery(c, "eventId")),
 		ItemKind:  utils.GetStrFromQuery(c, "itemKind"),
 		Direction: utils.GetStrFromQuery(c, "direction"),

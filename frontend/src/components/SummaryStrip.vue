@@ -41,7 +41,7 @@ const netHint = computed(() => {
       <text v-if="netHint" class="strip__hint">{{ netHint }}</text>
     </view>
     <view class="strip__cell" @click="emit('pending')">
-      <text class="strip__label">待还</text>
+      <text class="strip__label">未回礼</text>
       <text v-if="showPendingAmount" class="strip__value strip__value--pending">
         <Money :cent="pendingCent" size="l" tone="pending" />
       </text>

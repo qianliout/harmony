@@ -6,6 +6,7 @@ import (
 
 	"harmony/infra/consts"
 	modelfilter "harmony/infra/model/filter"
+	"harmony/infra/utils"
 )
 
 type Record struct {
@@ -21,7 +22,7 @@ type Record struct {
 	GiftName         string    `gorm:"column:gift_name" json:"giftName"`
 	GiftValueCent    int64     `gorm:"column:gift_value_cent" json:"giftValueCent"`
 	TotalCent        int64     `gorm:"column:total_cent;->" json:"totalCent"`
-	OccurredOn       time.Time `gorm:"column:occurred_on;type:date" json:"-"`
+	OccurredOn       utils.Date `gorm:"column:occurred_on" json:"-"`
 	DatePrecision    string    `gorm:"column:date_precision" json:"datePrecision"`
 	Status           string    `gorm:"column:status" json:"status"`
 	Remark           string    `gorm:"column:remark" json:"remark"`
@@ -82,11 +83,13 @@ type Resp struct {
 	DatePrecision  string  `json:"datePrecision"`
 	Status         string  `json:"status"`
 	StatusLabel    string  `json:"statusLabel"`
+	IsRepay        bool    `json:"isRepay"`
 	Remark         string  `json:"remark"`
 	PaperNote      string  `json:"paperNote"`
 	PaperPage      string  `json:"paperPage"`
 	PaperSeq       int     `json:"paperSeq"`
 	Source         string  `json:"source"`
+	RecognizeTaskID uint64 `json:"recognizeTaskId"`
 	RepayCount     int64   `json:"repayCount"`
 	CreatedAt      int64   `json:"createdAt"`
 	UpdatedAt      int64   `json:"updatedAt"`
@@ -111,8 +114,10 @@ type Intent struct {
 }
 
 type Query struct {
-	BookID    uint64 `json:"bookId"`
+	BookID       uint64 `json:"bookId"`
 	OriginBookID uint64 `json:"originBookId"`
+	BookCategory string `json:"bookCategory"`
+	EventType    string `json:"eventType"`
 	PersonID  uint64 `json:"personId"`
 	EventID   uint64 `json:"eventId"`
 	ItemKind  string `json:"itemKind"`
@@ -246,11 +251,29 @@ type PaperPageDetail struct {
 	Records []Resp `json:"records"`
 }
 
-func LabelOfStatus(status string) string {
-	if label, ok := consts.RecordStatusLabels[status]; ok {
-		return label
+// StatusLabel 按方向和是否为回礼生成展示文字。任何页面都不显示不带方向的“待还”。
+func StatusLabel(status, direction string, isRepay bool) string {
+	if isRepay {
+		return "回礼"
 	}
-	return consts.RecordStatusLabels[consts.RecordStatusPending]
+	if direction == consts.DirectionOut {
+		switch status {
+		case consts.RecordStatusRepaid:
+			return "对方已回"
+		case consts.RecordStatusNone:
+			return "不用回"
+		default:
+			return "对方未回"
+		}
+	}
+	switch status {
+	case consts.RecordStatusRepaid:
+		return "已回礼"
+	case consts.RecordStatusNone:
+		return "不用回"
+	default:
+		return "未回礼"
+	}
 }
 
 func PageFilter() *modelfilter.Filter { return &modelfilter.Filter{} }

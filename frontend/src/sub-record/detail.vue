@@ -13,6 +13,9 @@ import PaperRepaySheet from '@/components/PaperRepaySheet.vue'
 import Skeleton from '@/components/Skeleton.vue'
 import StatusPill from '@/components/StatusPill.vue'
 import { openConfirmSheet } from '@/composables/useConfirmSubmit'
+// #ifdef H5
+import { useAuthStore } from '@/stores/auth'
+// #endif
 import { relations } from '@/styles/palette'
 import { centToChinese } from '@/utils/chinese-amount'
 import { formatDate, preciseDateLabel } from '@/utils/date'
@@ -21,6 +24,9 @@ import { formatCent } from '@/utils/money'
 
 const recordId = ref(0)
 const detail = ref<RecordDetail | null>(null)
+// #ifdef H5
+const auth = useAuthStore()
+// #endif
 const loading = ref(true)
 const showSkeleton = ref(false)
 const error = ref('')
@@ -31,11 +37,22 @@ const updating = ref(false)
 let skeletonTimer: ReturnType<typeof setTimeout> | null = null
 let loadedOnce = false
 
-const statusOptions = [
-  { code: 'pending', label: '待还', desc: '收礼后尚未还礼' },
-  { code: 'repaid', label: '已还', desc: '已经还过这份人情' },
-  { code: 'none', label: '无需还', desc: '不必再还，不再出现在待还清单' },
-] as const
+const statusOptions = computed(() => {
+  const out = detail.value?.direction === 'out'
+  return [
+    {
+      code: 'pending',
+      label: out ? '对方未回' : '未回礼',
+      desc: out ? '送出去的礼对方还没回' : '收礼后还没回礼',
+    },
+    {
+      code: 'repaid',
+      label: out ? '对方已回' : '已回礼',
+      desc: out ? '对方已经回过这份人情' : '已经回过这份人情',
+    },
+    { code: 'none', label: '不用回', desc: '不必再回，不再出现在回礼清单' },
+  ]
+})
 
 const SOURCE_LABELS: Record<string, string> = {
   manual: '手动录入',
@@ -69,9 +86,15 @@ const dateLabel = computed(() =>
   detail.value ? preciseDateLabel(detail.value.occurredOn, detail.value.datePrecision) : '',
 )
 const sourceLabel = computed(() => SOURCE_LABELS[detail.value?.source ?? ''] ?? '网页录入')
-const canRepay = computed(() => detail.value?.direction === 'in' && detail.value?.status === 'pending')
-const repayActionLabel = computed(() => (detail.value?.paperNote ? '补录纸本还礼' : '还礼'))
-const chainTitle = computed(() => (detail.value?.direction === 'in' ? '被以下还礼关联' : '还的是以下收礼'))
+// #ifdef H5
+const canViewSource = computed(() => Boolean(detail.value?.recognizeTaskId && auth.isAdmin))
+// #endif
+const canRepay = computed(
+  () => detail.value?.direction === 'in' && detail.value?.status === 'pending' && !detail.value?.isRepay,
+)
+const statusEditable = computed(() => Boolean(detail.value && !detail.value.isRepay))
+const repayActionLabel = computed(() => (detail.value?.paperNote ? '补录纸本回礼' : '回礼'))
+const chainTitle = computed(() => (detail.value?.direction === 'in' ? '被以下回礼关联' : '回的是以下收礼'))
 const chainRecords = computed<RecordItem[]>(() => {
   const item = detail.value
   if (!item) return []
@@ -135,14 +158,21 @@ async function setStatus(status: string): Promise<void> {
       paperPage: item.paperPage,
       paperSeq: item.paperSeq,
     })
-    detail.value = { ...item, status: status as RecordItem['status'] }
     toast('状态已更新', 'success')
+    await load()
   } catch (err) {
     toast(err instanceof Error ? err.message : '修改失败')
   } finally {
     updating.value = false
   }
 }
+
+// #ifdef H5
+function openSource(): void {
+  if (!detail.value?.recognizeTaskId || !auth.isAdmin) return
+  go(`/sub-recognize/index?taskId=${detail.value.recognizeTaskId}&readonly=1`)
+}
+// #endif
 
 function openChain(record: RecordItem): void {
   if (record.id === recordId.value) return
@@ -154,8 +184,8 @@ async function unlink(record: RecordItem): Promise<void> {
   if (!item) return
   const ok = await openConfirmSheet({
     kind: 'unlink-repay',
-    title: '解除还礼关联',
-    message: '解除后，这条还礼记录与原收礼记录不再关联，记录本身不会被删除。',
+    title: '解除回礼关联',
+    message: '解除后，这条回礼记录与原收礼记录不再关联，记录本身不会被删除。',
     conflicts: [{ id: record.id, summary: `${record.personName} · ${formatCent(record.totalCent)} · ${chainDate(record)}` }],
     confirmText: '解除关联',
   })
@@ -189,9 +219,9 @@ function repay(): void {
 
 function onRepaySaved(count: number, cent: number): void {
   if (count > 0) {
-    toast(`已补录 ${count} 笔还礼 · ${formatCent(cent)}`, 'success')
+    toast(`已补录 ${count} 笔回礼 · ${formatCent(cent)}`, 'success')
   } else {
-    toast('已标记为已还', 'success')
+    toast('已标记为已回礼', 'success')
   }
   void load()
 }
@@ -220,9 +250,15 @@ function chainDate(record: RecordItem): string {
           <text class="hero__direction">{{ directionLabel }}</text>
           <Money :cent="detail.totalCent" :direction="moneyDirection" size="display" />
           <text class="hero__chinese">{{ centToChinese(detail.totalCent) }}</text>
-          <view class="hero__status" @click="statusSheet = true">
-            <StatusPill :status="detail.status" clickable />
-            <text class="hero__status-caret">⌄</text>
+          <view class="hero__status" :class="{ 'hero__status--static': !statusEditable }" @click="statusEditable && (statusSheet = true)">
+            <StatusPill
+              :status="detail.status"
+              :direction="detail.direction"
+              :is-repay="detail.isRepay"
+              :label="detail.statusLabel"
+              :clickable="statusEditable"
+            />
+            <text v-if="statusEditable" class="hero__status-caret">⌄</text>
           </view>
           <text v-if="detail.giftName" class="hero__gift">
             礼品 {{ detail.giftName }}<text v-if="detail.giftValueCent"> · 估 {{ formatCent(detail.giftValueCent) }}</text>
@@ -239,7 +275,12 @@ function chainDate(record: RecordItem): string {
           <ListCell title="日期" :value="dateLabel" :arrow="false" />
           <ListCell v-if="detail.remark" title="备注" :value="detail.remark" :arrow="false" />
           <ListCell v-if="paperLabel" title="纸本" :value="paperLabel" :arrow="false" />
+          <!-- #ifdef H5 -->
+          <ListCell title="来源" :value="sourceLabel" :arrow="canViewSource" @click="openSource" />
+          <!-- #endif -->
+          <!-- #ifndef H5 -->
           <ListCell title="来源" :value="sourceLabel" :arrow="false" />
+          <!-- #endif -->
           <view v-if="detail.paperNote" class="note-cell" @click="noteExpanded = !noteExpanded">
             <text class="note-cell__label">标注</text>
             <text class="note-cell__text" :class="{ 'note-cell__text--full': noteExpanded }">
@@ -252,7 +293,7 @@ function chainDate(record: RecordItem): string {
       <view class="page">
         <view class="chain">
           <view class="chain__head">
-            <text class="chain__title">还礼链路</text>
+            <text class="chain__title">回礼链路</text>
             <text class="chain__sub">{{ chainTitle }}</text>
           </view>
           <view v-if="chainRecords.length" class="chain__list card">
@@ -268,7 +309,7 @@ function chainDate(record: RecordItem): string {
             </view>
           </view>
           <view v-else class="chain__empty card">
-            <text class="chain__empty-text">{{ detail.direction === 'in' ? '还没有还礼记录' : '没有关联的收礼记录' }}</text>
+            <text class="chain__empty-text">{{ detail.direction === 'in' ? '还没有回礼记录' : '没有关联的收礼记录' }}</text>
           </view>
         </view>
       </view>

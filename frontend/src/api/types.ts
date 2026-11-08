@@ -26,6 +26,9 @@ export interface ConfirmConflict {
 }
 
 export interface RecordFilters {
+  bookCategory: string
+  eventType: string
+  personId: number
   bookId: number
   eventId: number
   itemKind: string
@@ -182,11 +185,13 @@ export interface RecordItem {
   datePrecision: string
   status: 'pending' | 'repaid' | 'none'
   statusLabel: string
+  isRepay: boolean
   remark: string
   paperNote: string
   paperPage: string
   paperSeq: number
   source: string
+  recognizeTaskId: number
   repayCount: number
   createdAt: number
   updatedAt: number
@@ -304,6 +309,15 @@ export interface BookStat {
   recordCount: number
 }
 
+export interface BookCategoryStat {
+  category: string
+  label: string
+  inCent: number
+  outCent: number
+  cent: number
+  recordCount: number
+}
+
 export interface YearStats {
   year: number
   inCent: number
@@ -313,6 +327,7 @@ export interface YearStats {
   personCount: number
   monthly: MonthStat[]
   byItem: KindStat[]
+  byBookCategory: BookCategoryStat[]
   byEventType: EventTypeStat[]
   topPersons: PersonStat[]
   byBook: BookStat[]

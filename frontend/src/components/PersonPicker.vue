@@ -222,7 +222,7 @@ watch(
               <text class="picker__name">
                 <text v-for="(part, index) in segments(person.name, keyword)" :key="index" :class="{ 'picker__hit': part.hit }">{{ part.text }}</text>
               </text>
-              <text class="picker__meta">{{ person.relationLabel }}<text v-if="person.pendingCount"> · {{ person.pendingCount }} 笔待还</text></text>
+              <text class="picker__meta">{{ person.relationLabel }}<text v-if="person.pendingCount"> · {{ person.pendingCount }} 笔未回礼</text></text>
             </view>
           </view>
           <view v-if="!loading && keyword && !results.length && !creating" class="picker__hint">没有找到，可直接新建</view>

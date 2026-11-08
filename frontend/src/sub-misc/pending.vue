@@ -48,8 +48,8 @@ let suppressClick = false
 
 const tabs = computed(() =>
   [
-    { code: 'owed' as const, label: '我欠别人' },
-    { code: 'owing' as const, label: '别人欠我' },
+    { code: 'owed' as const, label: '我该回的' },
+    { code: 'owing' as const, label: '该回我的' },
   ].filter((tab) => tab.code === 'owed' || contextStore.settings.showOwing),
 )
 
@@ -120,7 +120,8 @@ function openPerson(row: PendingPerson): void {
     openId.value = 0
     return
   }
-  go(`/sub-person/detail?id=${row.person.id}&status=pending`)
+  const query = kind.value === 'owed' ? '&status=pending' : ''
+  go(`/sub-person/detail?id=${row.person.id}${query}`)
 }
 
 function setSort(value: SortKey): void {
@@ -220,10 +221,10 @@ async function markAll(row: PendingPerson): Promise<void> {
   dragX.value = 0
   const ok = await openConfirmSheet({
     kind: 'pending-none',
-    title: '全部无需还',
-    message: `${row.person.name} 的 ${row.count} 笔待还，合计 ${formatCent(row.totalCent)}，标记后不再出现在待还清单。`,
+    title: '全部不用回',
+    message: `${row.person.name} 的 ${row.count} 笔未回礼，合计 ${formatCent(row.totalCent)}，标记后不再出现在回礼清单。`,
     conflicts: [{ id: row.person.id, summary: `${row.count} 笔 · ${formatCent(row.totalCent)}` }],
-    confirmText: '全部无需还',
+    confirmText: '全部不用回',
   })
   if (!ok) return
   openId.value = 0
@@ -249,7 +250,7 @@ async function markAll(row: PendingPerson): Promise<void> {
         paperSeq: record.paperSeq,
       })
     }
-    toast(`已标记 ${records.length} 笔无需还`, 'success')
+    toast(`已标记 ${records.length} 笔为不用回`, 'success')
     await load()
   } catch (err) {
     toast(err instanceof Error ? err.message : '操作失败')
@@ -260,15 +261,15 @@ async function markAll(row: PendingPerson): Promise<void> {
 
 function emptyText(): { title: string; description: string } {
   if (kind.value === 'owed') {
-    return { title: '人情都还清了', description: '有新的收礼时会出现在这里' }
+    return { title: '人情都回完了', description: '有新的收礼时会出现在这里' }
   }
-  return { title: '没有人欠人情', description: '送出去的礼待还时会出现在这里' }
+  return { title: '暂时没有该回我的', description: '送出去的礼对方还没回时会出现在这里' }
 }
 </script>
 
 <template>
   <view class="screen pending">
-    <AppNav title="待还清单" />
+    <AppNav title="回礼清单" />
 
     <view class="page">
       <view class="tabs">
@@ -287,7 +288,7 @@ function emptyText(): { title: string; description: string } {
         <text class="summary__text">
           共 {{ data.personCount }} 人 · {{ data.totalCount }} 笔 ·
         </text>
-        <Money :cent="data.totalCent" tone="pending" size="m" />
+        <Money :cent="data.totalCent" :direction="kind === 'owed' ? 'none' : 'out'" :tone="kind === 'owed' ? 'pending' : undefined" size="m" />
       </view>
 
       <view class="sort" @click="sortSheet = true">
@@ -308,7 +309,7 @@ function emptyText(): { title: string; description: string } {
       <view class="rows">
         <view v-for="row in sortedPersons" :key="row.person.id" class="prow">
           <view class="prow__action" @click="markAll(row)">
-            <text>{{ markingId === row.person.id ? '处理中…' : '全部无需还' }}</text>
+            <text>{{ markingId === row.person.id ? '处理中…' : '全部不用回' }}</text>
           </view>
           <view
             class="prow__body"
@@ -320,7 +321,7 @@ function emptyText(): { title: string; description: string } {
             @longpress="onRowLongPress(row)"
             @click="openPerson(row)"
           >
-            <view class="prow__bar" />
+            <view v-if="kind === 'owed'" class="prow__bar" />
             <PersonAvatar :id="row.person.id" :name="row.person.name" :size="40" />
             <view class="prow__main">
               <view class="prow__line">
@@ -329,11 +330,11 @@ function emptyText(): { title: string; description: string } {
               </view>
               <text class="prow__meta">{{ row.count }} 笔 · 最早 {{ relativeSince(row.earliest) }}</text>
             </view>
-            <Money :cent="row.totalCent" tone="pending" size="m" />
+            <Money :cent="row.totalCent" :direction="kind === 'owed' ? 'none' : 'out'" :tone="kind === 'owed' ? 'pending' : undefined" size="m" />
           </view>
         </view>
       </view>
-      <text class="pending__hint">左滑或长按可批量标记无需还</text>
+      <text class="pending__hint">左滑或长按可批量标记不用回</text>
     </view>
 
     <EmptyState

@@ -63,12 +63,6 @@ const (
 	RecordStatusNone    = "none"
 )
 
-var RecordStatusLabels = map[string]string{
-	RecordStatusPending: "待还",
-	RecordStatusRepaid:  "已还",
-	RecordStatusNone:    "无需还",
-}
-
 const (
 	RecordSourceManual    = "manual"
 	RecordSourceRecognize = "recognize"
@@ -157,8 +151,11 @@ func ValidDirection(v string) bool {
 }
 
 func ValidRecordStatus(v string) bool {
-	_, ok := RecordStatusLabels[v]
-	return ok
+	switch v {
+	case RecordStatusPending, RecordStatusRepaid, RecordStatusNone:
+		return true
+	}
+	return false
 }
 
 func ValidRecordSource(v string) bool {
@@ -171,4 +168,22 @@ func ValidDatePrecision(v string) bool {
 
 func ValidDictType(v string) bool {
 	return v == DictTypeBookCategory || v == DictTypeItemKind
+}
+
+// DictSeed 是内置字典项的定义；schema.sql 的 owner=1 种子与新建用户的初始化共用这一份。
+type DictSeed struct {
+	DictType string
+	Code     string
+	Label    string
+	Color    string
+	Sort     int
+}
+
+var BuiltinDictItems = []DictSeed{
+	{DictType: DictTypeBookCategory, Code: DictCodeRenqing, Label: "人情礼", Color: "cinnabar", Sort: 10},
+	{DictType: DictTypeBookCategory, Code: DictCodeHuopao, Label: "火炮", Color: "amber", Sort: 20},
+	{DictType: DictTypeBookCategory, Code: DictCodeOther, Label: "其他", Color: "stone", Sort: 30},
+	{DictType: DictTypeItemKind, Code: ItemKindCash, Label: "现金", Color: "cinnabar", Sort: 10},
+	{DictType: DictTypeItemKind, Code: ItemKindHuopao, Label: "火炮", Color: "amber", Sort: 20},
+	{DictType: DictTypeItemKind, Code: ItemKindGift, Label: "实物礼品", Color: "teal", Sort: 30},
 }

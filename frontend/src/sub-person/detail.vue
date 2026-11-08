@@ -18,7 +18,18 @@ import { themeVars } from '@/styles/theme'
 import { back, go, toast } from '@/utils/nav'
 
 function emptyFilters(): RecordFilters {
-  return { bookId: 0, eventId: 0, itemKind: '', direction: '', status: '', from: '', to: '' }
+  return {
+    bookCategory: '',
+    eventType: '',
+    personId: 0,
+    bookId: 0,
+    eventId: 0,
+    itemKind: '',
+    direction: '',
+    status: '',
+    from: '',
+    to: '',
+  }
 }
 
 const personId = ref(0)
@@ -56,6 +67,8 @@ const phoneLabel = computed(() => {
 
 const activeFilterCount = computed(() => {
   const values = [
+    filters.value.bookCategory,
+    filters.value.eventType,
     filters.value.bookId,
     filters.value.eventId,
     filters.value.itemKind,
@@ -82,7 +95,7 @@ const selectedCent = computed(() => {
 
 const hasAnyFilter = computed(() => activeFilterCount.value > 0 || quick.value !== 'all')
 const emptyTitle = computed(() => {
-  if (quick.value === 'pending' && !activeFilterCount.value) return '人情都还清了'
+  if (quick.value === 'pending' && !activeFilterCount.value) return '人情都回完了'
   if (hasAnyFilter.value) return '没有符合条件的记录'
   return '还没有记录'
 })
@@ -122,6 +135,8 @@ function stopSkeleton(): void {
 
 function buildParams(): TimelineParams {
   const params: TimelineParams = { personId: personId.value }
+  if (filters.value.bookCategory) params.bookCategory = filters.value.bookCategory
+  if (filters.value.eventType) params.eventType = filters.value.eventType
   if (filters.value.bookId) params.bookId = filters.value.bookId
   if (filters.value.eventId) params.eventId = filters.value.eventId
   if (filters.value.itemKind) params.itemKind = filters.value.itemKind
@@ -130,6 +145,7 @@ function buildParams(): TimelineParams {
   if (filters.value.from) params.from = filters.value.from
   if (filters.value.to) params.to = filters.value.to
   if (quick.value === 'pending') {
+    params.direction = 'in'
     params.status = 'pending'
   } else if (quick.value === 'in' || quick.value === 'out') {
     params.direction = quick.value
@@ -231,7 +247,7 @@ function onSummaryPending(): void {
 
 function enterSelect(): void {
   if (!pendingCount.value) {
-    toast('没有待还的记录')
+    toast('没有未回礼的记录')
     return
   }
   previousQuick = quick.value
@@ -271,7 +287,7 @@ function selectAll(group: TimelineGroup): void {
 
 function nextStep(): void {
   if (!selectedIds.value.length) {
-    toast('先勾选要还的记录')
+    toast('先勾选要回礼的记录')
     return
   }
   const ids = selectedIds.value.join(',')
@@ -415,7 +431,7 @@ onBackPress(() => {
           </view>
         </view>
         <view v-else class="bottom-bar">
-          <view class="btn btn--secondary bottom-bar__btn" @click="enterSelect">还礼</view>
+          <view class="btn btn--secondary bottom-bar__btn" @click="enterSelect">回礼</view>
           <view class="btn btn--primary bottom-bar__btn--main" @click="addRecord">
             <text class="bar-text">给{{ person.name }}记一笔</text>
           </view>
@@ -425,6 +441,7 @@ onBackPress(() => {
       <FilterSheet
         v-model:show="filterSheet"
         :value="filters"
+        hide-person
         @apply="applyFilters"
         @reset="resetFilters"
       />

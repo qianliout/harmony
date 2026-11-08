@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"harmony/infra/consts"
+	"harmony/infra/utils"
 )
 
 type Event struct {
@@ -13,7 +14,7 @@ type Event struct {
 	OwnerID        uint64     `gorm:"column:owner_id" json:"ownerId"`
 	Name           string     `gorm:"column:name" json:"name"`
 	Type           string     `gorm:"column:type" json:"type"`
-	EventDate      *time.Time `gorm:"column:event_date;type:date" json:"-"`
+	EventDate      *utils.Date `gorm:"column:event_date" json:"-"`
 	Location       string     `gorm:"column:location" json:"location"`
 	Host           string     `gorm:"column:host" json:"host"`
 	HostPersonID   *uint64    `gorm:"column:host_person_id" json:"hostPersonId"`

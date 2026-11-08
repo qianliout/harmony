@@ -208,8 +208,8 @@ onShow(() => {
         <SectionCard title="首页显示">
           <view class="switch-row">
             <view class="switch-row__main">
-              <text class="switch-row__title">别人欠我</text>
-              <text class="caption">关闭后，待还金额不再突出显示</text>
+              <text class="switch-row__title">该回我的</text>
+              <text class="caption">关闭后，该回我的金额不再突出显示</text>
             </view>
             <view class="toggle" :class="{ 'toggle--on': showOwing }" @click="toggleOwing">
               <view class="toggle__knob" />

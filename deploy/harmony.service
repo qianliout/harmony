@@ -1,0 +1,22 @@
+[Unit]
+Description=harmony ledger
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=harmony
+Group=harmony
+EnvironmentFile=/etc/harmony/harmony.env
+ExecStart=/opt/harmony/harmony -config /etc/harmony/config.yaml
+Restart=on-failure
+RestartSec=3
+WorkingDirectory=/var/lib/harmony
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/harmony /var/backups/harmony
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target

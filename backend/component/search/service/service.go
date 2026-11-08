@@ -99,8 +99,8 @@ func (s *SearchSrv) Search(ctx context.Context, query string, limit int) (*searc
 	return result, nil
 }
 
-func (s *SearchSrv) Records(ctx context.Context, query string, page int64, pageSize int64) ([]search.RecordHit, int64, error) {
-	query = strings.TrimSpace(query)
+func (s *SearchSrv) Records(ctx context.Context, q record.Query, page int64, pageSize int64) ([]search.RecordHit, int64, error) {
+	query := strings.TrimSpace(q.Keyword)
 	if page < 1 {
 		page = 1
 	}
@@ -108,7 +108,9 @@ func (s *SearchSrv) Records(ctx context.Context, query string, page int64, pageS
 		pageSize = consts.DefaultPageSize
 	}
 	intent := record.ParseIntent(query)
-	items, total, err := s.records.List(ctx, record.Query{Keyword: query, Intent: intent},
+	q.Keyword = query
+	q.Intent = intent
+	items, total, err := s.records.List(ctx, q,
 		&modelfilter.Filter{Offset: (page - 1) * pageSize, Limit: pageSize})
 	if err != nil {
 		return nil, 0, err

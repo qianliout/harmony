@@ -212,3 +212,78 @@ func TestDeleteProtection(t *testing.T) {
 		t.Fatalf("expected repay record deleted, got %v", err)
 	}
 }
+
+func TestStatusLabelsAndFilters(t *testing.T) {
+	h := newHarness(t)
+	p := h.createPerson("标签人")
+	e := h.createEvent("标签事", "wedding", "2024-02-02", "day")
+	b := h.createBook("标签本", "renqing", 0)
+	in, err := h.recordSrv.Create(h.ctx(), record.CreateParam{
+		PersonID: p, EventID: e, BookID: b, Direction: "in",
+		AmountCent: 10000, OccurredOn: "2024-02-02", DatePrecision: "day", Status: "pending",
+	})
+	requireOK(t, err)
+	if in.StatusLabel != "未回礼" || in.IsRepay {
+		t.Fatalf("unexpected in label %+v", in)
+	}
+	out, err := h.recordSrv.Create(h.ctx(), record.CreateParam{
+		PersonID: p, EventID: e, BookID: b, Direction: "out",
+		AmountCent: 10000, OccurredOn: "2024-02-02", DatePrecision: "day", Status: "pending",
+		Confirm: true,
+	})
+	requireOK(t, err)
+	if out.StatusLabel != "对方未回" {
+		t.Fatalf("unexpected out label %q", out.StatusLabel)
+	}
+	repaid, err := h.recordSrv.Repay(h.ctx(), record.RepayParam{
+		OriginIDs:  []uint64{in.ID},
+		OccurredOn: "2024-03-03",
+		Items:      []record.RepayItem{{BookID: b, ItemKind: "cash", AmountCent: 10000}},
+	})
+	requireOK(t, err)
+	if len(repaid.Records) != 1 || repaid.Records[0].StatusLabel != "回礼" || !repaid.Records[0].IsRepay {
+		t.Fatalf("unexpected repay record %+v", repaid.Records)
+	}
+
+	// 只传 status 时按收礼处理，不能混入送礼记录。
+	list, total, err := h.recordSrv.List(h.ctx(), record.Query{Status: "repaid"}, nil)
+	requireOK(t, err)
+	if total != 1 || len(list) != 1 || list[0].Direction != "in" {
+		t.Fatalf("status filter should imply direction=in, got total=%d %+v", total, list)
+	}
+
+	// 主维度筛选：类别与事项类型。
+	byCategory, total, err := h.recordSrv.List(h.ctx(), record.Query{BookCategory: "renqing"}, nil)
+	requireOK(t, err)
+	if total != 3 || len(byCategory) != 3 {
+		t.Fatalf("category filter got %d records", total)
+	}
+	_, total, err = h.recordSrv.List(h.ctx(), record.Query{EventType: "funeral"}, nil)
+	requireOK(t, err)
+	if total != 0 {
+		t.Fatalf("event type filter should be empty, got %d", total)
+	}
+}
+
+func TestSQLiteDateBoundary(t *testing.T) {
+	h := newHarness(t)
+	p := h.createPerson("边界人")
+	e := h.createEvent("边界事", "other", "2011-10-31", "day")
+	b := h.createBook("边界本", "renqing", 0)
+	_, err := h.recordSrv.Create(h.ctx(), record.CreateParam{
+		PersonID: p, EventID: e, BookID: b, Direction: "in",
+		AmountCent: 5000, OccurredOn: "2011-10-31", DatePrecision: "day", Status: "pending",
+	})
+	requireOK(t, err)
+
+	items, total, err := h.recordSrv.List(h.ctx(), record.Query{To: "2011-10-31"}, nil)
+	requireOK(t, err)
+	if total != 1 || len(items) != 1 {
+		t.Fatalf("to=2011-10-31 should include the record, total=%d", total)
+	}
+	_, total, err = h.recordSrv.List(h.ctx(), record.Query{From: "2011-11-01"}, nil)
+	requireOK(t, err)
+	if total != 0 {
+		t.Fatalf("from=2011-11-01 should exclude the record, total=%d", total)
+	}
+}

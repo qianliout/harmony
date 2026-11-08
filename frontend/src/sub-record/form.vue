@@ -83,17 +83,22 @@ const dateTouched = ref(false)
 let initializing = true
 let lastQuery: Record<string, string> = {}
 
-const statusOptions = [
-  { code: 'pending', label: '待还' },
-  { code: 'repaid', label: '已还' },
-  { code: 'none', label: '无需还' },
-] as const
+const statusOptions = computed(() => {
+  const out = direction.value === 'out'
+  return [
+    { code: 'pending', label: out ? '对方未回' : '未回礼' },
+    { code: 'repaid', label: out ? '对方已回' : '已回礼' },
+    { code: 'none', label: '不用回' },
+  ] as const
+})
 
 const title = computed(() => {
   if (mode.value === 'edit') return '编辑记录'
-  if (mode.value === 'repay') return person.value ? `还礼给 ${person.value.name}` : '还礼'
+  if (mode.value === 'repay') return person.value ? `回礼给 ${person.value.name}` : '回礼'
   return '记一笔'
 })
+
+const isRepayRecord = computed(() => mode.value === 'edit' && Boolean(editRecord.value?.isRepay))
 
 const linked = computed(() => {
   const record = editRecord.value
@@ -307,7 +312,7 @@ async function initRepay(ids: number[]): Promise<void> {
   }
   const first = details[0]
   if (details.some((item) => item.personId !== first.personId)) {
-    throw new Error('一次还礼只能对应同一个人')
+    throw new Error('一次回礼只能对应同一个人')
   }
   origins.value = details
   originIds.value = details.map((item) => item.id)
@@ -385,7 +390,7 @@ function onPersonSelect(selected: SelectedPerson): void {
 function openPerson(): void {
   if (personLocked.value) {
     if (mode.value === 'edit') {
-      toast(linked.value ? '已关联还礼，先解除关联再修改' : '编辑时不能更换亲友')
+      toast(linked.value ? '已关联回礼，先解除关联再修改' : '编辑时不能更换亲友')
     }
     return
   }
@@ -405,7 +410,7 @@ function onDateChange(event: Event): void {
 
 function toggleDirection(value: 'in' | 'out'): void {
   if (directionLocked.value) {
-    if (mode.value === 'edit' && linked.value) toast('已关联还礼，先解除关联再修改')
+    if (mode.value === 'edit' && linked.value) toast('已关联回礼，先解除关联再修改')
     return
   }
   direction.value = value
@@ -522,7 +527,7 @@ async function saveRepay(): Promise<void> {
     remark: remark.value.trim(),
   })
   await contextStore.rememberContext(bookId.value, event.value?.id ?? 0)
-  toast('已记录还礼', 'success')
+  toast('已记录回礼', 'success')
   back()
 }
 
@@ -582,7 +587,7 @@ async function save(again = false): Promise<void> {
 
 async function removeRecord(): Promise<void> {
   if (!recordId.value) return
-  const ok = await confirmModal('删除后无法恢复，关联的还礼记录不受影响。', '删除这笔记录')
+  const ok = await confirmModal('删除后无法恢复，关联的回礼记录不受影响。', '删除这笔记录')
   if (!ok) return
   try {
     await deleteRecord(recordId.value)
@@ -718,7 +723,7 @@ function goDetail(record: RecordDetail): void {
               </view>
             </picker>
 
-            <view v-if="mode !== 'repay'" class="field field--block">
+            <view v-if="mode !== 'repay' && !isRepayRecord" class="field field--block">
               <text class="field__label">状态</text>
               <view class="field__value statuses">
                 <text
@@ -733,14 +738,14 @@ function goDetail(record: RecordDetail): void {
               </view>
             </view>
 
-            <view v-else class="field field--block">
+            <view v-else-if="mode === 'repay'" class="field field--block">
               <text class="field__label">状态</text>
               <view class="field__value">
                 <view class="switch-row" @click="markRepaid = !markRepaid">
                   <view class="switch" :class="{ 'switch--on': markRepaid }"><view class="switch__dot" /></view>
-                  <text class="switch__label">同时标记为已还</text>
+                  <text class="switch__label">同时标记为已回礼</text>
                 </view>
-                <text v-if="!markRepaid" class="repay-hint">部分还礼时可关闭，原记录保持待还</text>
+                <text v-if="!markRepaid" class="repay-hint">部分回礼时可关闭，原记录保持未回礼</text>
               </view>
             </view>
 
@@ -750,7 +755,7 @@ function goDetail(record: RecordDetail): void {
             </view>
           </view>
 
-          <text v-if="mode === 'edit' && linked" class="linked-hint">这笔记录已有还礼关联，方向与亲友不可修改。</text>
+          <text v-if="mode === 'edit' && linked" class="linked-hint">这笔记录已有回礼关联，方向与亲友不可修改。</text>
 
           <view v-if="mode === 'edit'" class="row-actions">
             <text class="row-actions__danger" @click="removeRecord">删除这笔记录</text>
@@ -762,7 +767,7 @@ function goDetail(record: RecordDetail): void {
     <view v-if="!loading && !error" class="form-footer">
       <view class="form-footer__links">
         <text v-if="mode === 'create'" class="form-footer__link" @click="save(true)">保存并再记一笔</text>
-        <text v-else-if="mode === 'repay'" class="form-footer__hint">保存后，被还记录{{ markRepaid ? '会' : '不会' }}标为已还</text>
+        <text v-else-if="mode === 'repay'" class="form-footer__hint">保存后，被回记录{{ markRepaid ? '会' : '不会' }}标为已回礼</text>
       </view>
       <AmountPad
         v-model="amountText"

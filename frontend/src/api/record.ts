@@ -9,6 +9,8 @@ import type {
 } from './types'
 
 export interface RecordListParams {
+  bookCategory?: string
+  eventType?: string
   bookId?: number
   originBookId?: number
   personId?: number

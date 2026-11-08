@@ -87,7 +87,7 @@ func (s *TransferSrv) Export(ctx context.Context, format string, q record.Query)
 	}
 	eventDateByID := make(map[uint64]string, len(events))
 	for i := range events {
-		eventDateByID[events[i].ID] = utils.DateStringPtr(events[i].EventDate)
+		eventDateByID[events[i].ID] = utils.DateStringOf(events[i].EventDate)
 	}
 	rows := make([]transfer.Row, 0, len(items))
 	for i := range items {
@@ -260,7 +260,7 @@ func (s *TransferSrv) Commit(ctx context.Context, param transfer.CommitParam) (*
 				}
 			}
 			direction := directionCode(row.Direction)
-			status := statusCode(row.Status)
+			status := statusCode(row.Status, directionCode(row.Direction))
 			precision := consts.DatePrecisionDay
 			if _, err := s.records.CreateInTx(ctx, tx, record.CreateParam{
 				PersonID:      personItem.ID,
@@ -344,7 +344,7 @@ func (s *TransferSrv) ensureEvent(tx *gorm.DB, ownerID uint64, row transfer.Row)
 			return nil, false, fmt.Errorf("事项日期不正确")
 		}
 		normalized := utils.NormalizeDate(parsed, consts.DatePrecisionDay)
-		item.EventDate = &normalized
+		item.EventDate = utils.DatePtr(normalized)
 	}
 	if err := s.events.Create(tx, item); err != nil {
 		return nil, false, err
@@ -424,7 +424,7 @@ func validateRow(row transfer.Row, itemLabels map[string]string) []string {
 	if strings.TrimSpace(row.ItemKind) != "" && itemKindCode(row.ItemKind, itemLabels) == "" {
 		errorsList = append(errorsList, "名目不存在")
 	}
-	if strings.TrimSpace(row.Status) != "" && statusCode(row.Status) == "" {
+	if strings.TrimSpace(row.Status) != "" && statusCode(row.Status, directionCode(row.Direction)) == "" {
 		errorsList = append(errorsList, "状态应为待还、已还或无需还")
 	}
 	return errorsList
@@ -479,15 +479,18 @@ func directionCode(text string) string {
 	}
 }
 
-func statusCode(text string) string {
+func statusCode(text string, direction string) string {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return consts.RecordStatusPending
 	}
-	for code, label := range consts.RecordStatusLabels {
-		if text == code || text == label {
-			return code
-		}
+	switch text {
+	case consts.RecordStatusPending, "未回礼", "对方未回", "待还":
+		return consts.RecordStatusPending
+	case consts.RecordStatusRepaid, "已回礼", "对方已回", "已还":
+		return consts.RecordStatusRepaid
+	case consts.RecordStatusNone, "不用回", "无需还", "回礼":
+		return consts.RecordStatusNone
 	}
 	return ""
 }

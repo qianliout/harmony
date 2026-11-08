@@ -1,7 +1,6 @@
 package store
 
 import (
-	"time"
 
 	"gorm.io/gorm"
 )
@@ -10,7 +9,7 @@ type PendingRow struct {
 	PersonID  uint64    `gorm:"column:person_id"`
 	Count     int64     `gorm:"column:cnt"`
 	TotalCent int64     `gorm:"column:total_cent"`
-	Earliest  time.Time `gorm:"column:earliest"`
+	Earliest  string `gorm:"column:earliest"`
 }
 
 type Store struct{}

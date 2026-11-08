@@ -2,7 +2,8 @@ package store
 
 import (
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
+
+	"time"
 
 	"harmony/infra/model/book"
 	"harmony/infra/model/record"
@@ -120,12 +121,10 @@ func (s *Store) ByItem(db *gorm.DB, ownerID uint64, bookID uint64) ([]book.ItemP
 	return parts, err
 }
 
-// LockBooks 合并事务内锁住涉及的本子，防止并发重复合并。
-func (s *Store) LockBooks(tx *gorm.DB, ownerID uint64, ids []uint64) ([]book.Book, error) {
+// GetBooksInTx 在写事务内读取涉及的本子。SQLite 没有行锁，并发安全由 _txlock=immediate 保证。
+func (s *Store) GetBooksInTx(tx *gorm.DB, ownerID uint64, ids []uint64) ([]book.Book, error) {
 	items := make([]book.Book, 0)
-	err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-		Where("owner_id = ? AND id IN ?", ownerID, ids).
-		Find(&items).Error
+	err := tx.Where("owner_id = ? AND id IN ?", ownerID, ids).Find(&items).Error
 	return items, err
 }
 
@@ -141,11 +140,12 @@ func (s *Store) MovePageChecks(tx *gorm.DB, ownerID uint64, sourceIDs []uint64, 
 	if len(sourceIDs) == 0 {
 		return nil
 	}
+	now := time.Now()
 	err := tx.Exec(`INSERT INTO paper_page_check (owner_id, book_id, paper_page, declared_cent, created_at, updated_at)
-		SELECT owner_id, ?, paper_page, declared_cent, NOW(3), NOW(3)
-		FROM paper_page_check WHERE owner_id = ? AND book_id IN ?
-		ON DUPLICATE KEY UPDATE declared_cent = VALUES(declared_cent), updated_at = VALUES(updated_at)`,
-		targetID, ownerID, sourceIDs).Error
+		SELECT owner_id, ?, paper_page, declared_cent, ?, ?
+		FROM paper_page_check WHERE owner_id = ? AND book_id IN ? AND true
+		ON CONFLICT(owner_id, book_id, paper_page) DO UPDATE SET declared_cent = excluded.declared_cent, updated_at = excluded.updated_at`,
+		targetID, now, now, ownerID, sourceIDs).Error
 	if err != nil {
 		return err
 	}
@@ -170,7 +170,7 @@ func (s *Store) MarkMerged(tx *gorm.DB, ownerID uint64, sourceIDs []uint64, targ
 		Updates(map[string]any{
 			"status":         "merged",
 			"merged_into_id": targetID,
-			"merged_at":      gorm.Expr("NOW(3)"),
+			"merged_at":      time.Now(),
 		}).Error
 }
 

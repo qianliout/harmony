@@ -95,6 +95,14 @@ func (s *RecordSrv) List(ctx context.Context, q record.Query, f *modelfilter.Fil
 	if q.Status != "" && !consts.ValidRecordStatus(q.Status) {
 		return nil, 0, response.BadRequest("状态取值不正确", "invalid status")
 	}
+	if q.BookCategory != "" {
+		if _, err := s.dicts.GetByCode(s.rdb.Get(), ownerID, consts.DictTypeBookCategory, q.BookCategory); err != nil {
+			return nil, 0, response.BadRequest("礼簿类别不存在", "invalid book category")
+		}
+	}
+	if q.EventType != "" && !consts.ValidEventType(q.EventType) {
+		return nil, 0, response.BadRequest("事项类型不正确", "invalid event type")
+	}
 	items, total, err := s.store.List(s.rdb.Get(), ownerID, q, f)
 	if err != nil {
 		return nil, 0, err
@@ -292,7 +300,7 @@ func (s *RecordSrv) validateAndBuild(tx *gorm.DB, ownerID uint64, param record.C
 		AmountCent:      param.AmountCent,
 		GiftName:        strings.TrimSpace(param.GiftName),
 		GiftValueCent:   param.GiftValueCent,
-		OccurredOn:      occurredOn,
+		OccurredOn:      utils.DateOf(occurredOn),
 		DatePrecision:   precision,
 		Status:          status,
 		Remark:          strings.TrimSpace(param.Remark),
@@ -378,12 +386,21 @@ func (s *RecordSrv) Update(ctx context.Context, id uint64, param record.UpdatePa
 		if err != nil {
 			return nil, response.BadRequest("记账日期不正确", "invalid date")
 		}
-		occurredOn = utils.NormalizeDate(parsed, precision)
+		occurredOn = utils.DateOf(utils.NormalizeDate(parsed, precision))
 	}
 	status := item.Status
 	if param.Status != "" {
 		if !consts.ValidRecordStatus(param.Status) {
 			return nil, response.BadRequest("状态取值不正确", "invalid status")
+		}
+		if item.Direction == consts.DirectionOut && item.Status == consts.RecordStatusNone {
+			repayLinks, linkErr := s.store.LinksByRepay(db, ownerID, item.ID)
+			if linkErr != nil {
+				return nil, linkErr
+			}
+			if len(repayLinks) > 0 && param.Status != consts.RecordStatusNone {
+				return nil, response.StateConflict("回礼生成的送礼记录状态固定为不用回")
+			}
 		}
 		status = param.Status
 	}
@@ -445,7 +462,7 @@ func (s *RecordSrv) Delete(ctx context.Context, id uint64, confirm bool) error {
 			Kind:        consts.ConfirmUnlinkOnDelete,
 			Title:       "删除这笔还礼",
 			Message:     "这笔还礼关联了 " + strconv.Itoa(len(links)) + " 笔收礼，删除后会解除关联",
-			Conflicts:   []response.ConfirmConflict{{ID: id, Summary: "送 ¥" + amountLabel(item.TotalCent) + " · " + utils.DateString(item.OccurredOn)}},
+			Conflicts:   []response.ConfirmConflict{{ID: id, Summary: "送 ¥" + amountLabel(item.TotalCent) + " · " + item.OccurredOn.String()}},
 			ConfirmText: "删除并解除关联",
 		}
 		return response.Conflict(consts.ReasonNeedConfirm, payload.Message, payload)
@@ -556,12 +573,16 @@ func (s *RecordSrv) RepayInTx(ctx context.Context, tx *gorm.DB, param record.Rep
 	if len(originIDs) == 0 {
 		return nil, response.BadRequest("请选择要还的收礼记录", "origin records are required")
 	}
-	origins, err := s.store.LockRecords(tx, ownerID, originIDs)
+	origins, err := s.store.GetRecordsInTx(tx, ownerID, originIDs)
 	if err != nil {
 		return nil, err
 	}
 	if len(origins) != len(originIDs) {
 		return nil, response.NotFound("部分收礼记录不存在")
+	}
+	markRepaid := true
+	if param.MarkRepaid != nil {
+		markRepaid = *param.MarkRepaid
 	}
 	personID := origins[0].PersonID
 	for i := range origins {
@@ -569,7 +590,10 @@ func (s *RecordSrv) RepayInTx(ctx context.Context, tx *gorm.DB, param record.Rep
 			return nil, response.StateConflict("只能对收礼记录做还礼")
 		}
 		if origins[i].Status == consts.RecordStatusNone {
-			return nil, response.StateConflict("这笔记录标为无需还，不能还礼")
+			return nil, response.StateConflict("这笔记录标为不用回，不能回礼")
+		}
+		if markRepaid && origins[i].Status == consts.RecordStatusRepaid {
+			return nil, response.StateConflict("这笔收礼已经回礼了")
 		}
 		if origins[i].PersonID != personID {
 			return nil, response.BadRequest("一次还礼只能对应同一个人", "origin records must belong to one person")
@@ -601,7 +625,7 @@ func (s *RecordSrv) RepayInTx(ctx context.Context, tx *gorm.DB, param record.Rep
 		}
 		occurredOn = parsed
 	} else if eventItem.EventDate != nil {
-		occurredOn = *eventItem.EventDate
+		occurredOn = eventItem.EventDate.Time
 	}
 	occurredOn = utils.NormalizeDate(occurredOn, precision)
 
@@ -634,7 +658,7 @@ func (s *RecordSrv) RepayInTx(ctx context.Context, tx *gorm.DB, param record.Rep
 			AmountCent:    item.AmountCent,
 			GiftName:      strings.TrimSpace(item.GiftName),
 			GiftValueCent: item.GiftValueCent,
-			OccurredOn:    occurredOn,
+			OccurredOn:    utils.DateOf(occurredOn),
 			DatePrecision: precision,
 			Status:        consts.RecordStatusNone,
 			Remark:        strings.TrimSpace(param.Remark),
@@ -655,10 +679,6 @@ func (s *RecordSrv) RepayInTx(ctx context.Context, tx *gorm.DB, param record.Rep
 	}
 	if err := s.store.SetPaperNoteIfEmpty(tx, ownerID, originIDs, strings.TrimSpace(param.PaperNote)); err != nil {
 		return nil, err
-	}
-	markRepaid := true
-	if param.MarkRepaid != nil {
-		markRepaid = *param.MarkRepaid
 	}
 	if markRepaid {
 		if err := s.store.SetStatus(tx, ownerID, originIDs, consts.RecordStatusRepaid); err != nil {
@@ -714,7 +734,7 @@ func (s *RecordSrv) resolveRepayEvent(tx *gorm.DB, ownerID uint64, personID uint
 			return nil, response.BadRequest("还礼事项日期不正确", "invalid event date")
 		}
 		normalized := utils.NormalizeDate(parsed, precision)
-		item.EventDate = &normalized
+		item.EventDate = utils.DatePtr(normalized)
 	}
 	item.HostPersonID = &personID
 	if err := s.events.Create(tx, item); err != nil {
@@ -896,6 +916,7 @@ func (s *RecordSrv) serialize(db *gorm.DB, ownerID uint64, items []record.Record
 		if item.Direction == consts.DirectionIn {
 			repayCount = originCounts[item.ID]
 		}
+		isRepay := item.Direction == consts.DirectionOut && repayCounts[item.ID] > 0
 		originName := ""
 		if item.OriginBookID != item.BookID {
 			originName = originBook.Name
@@ -919,15 +940,17 @@ func (s *RecordSrv) serialize(db *gorm.DB, ownerID uint64, items []record.Record
 			GiftName:       item.GiftName,
 			GiftValueCent:  item.GiftValueCent,
 			TotalCent:      item.TotalCent,
-			OccurredOn:     utils.DateString(item.OccurredOn),
+			OccurredOn:     item.OccurredOn.String(),
 			DatePrecision:  item.DatePrecision,
 			Status:         item.Status,
-			StatusLabel:    record.LabelOfStatus(item.Status),
+			StatusLabel:    record.StatusLabel(item.Status, item.Direction, isRepay),
+			IsRepay:        isRepay,
 			Remark:         item.Remark,
 			PaperNote:      item.PaperNote,
 			PaperPage:      item.PaperPage,
 			PaperSeq:       item.PaperSeq,
 			Source:         item.Source,
+			RecognizeTaskID: recognizeTaskID(item.RecognizeTaskID),
 			RepayCount:     repayCount,
 			CreatedAt:      utils.Millis(item.CreatedAt),
 			UpdatedAt:      utils.Millis(item.UpdatedAt),
@@ -1056,7 +1079,7 @@ func (s *RecordSrv) duplicateError(ownerID uint64, personItem *person.Person, ev
 		conflicts = append(conflicts, response.ConfirmConflict{
 			ID: duplicates[i].ID,
 			Summary: consts.DirectionLabels[duplicates[i].Direction] + " ¥" +
-				amountLabel(duplicates[i].TotalCent) + " · " + utils.DateString(duplicates[i].OccurredOn),
+				amountLabel(duplicates[i].TotalCent) + " · " + duplicates[i].OccurredOn.String(),
 			CreatedAt: utils.Millis(duplicates[i].CreatedAt),
 		})
 	}
@@ -1161,6 +1184,13 @@ func pageTokens(value string) []string {
 		tokens = append(tokens, current.String())
 	}
 	return tokens
+}
+
+func recognizeTaskID(id *uint64) uint64 {
+	if id == nil {
+		return 0
+	}
+	return *id
 }
 
 func labelOf(labels map[string]string, code string) string {

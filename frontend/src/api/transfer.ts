@@ -1,4 +1,4 @@
-import { apiBaseURL, http, queryString, unwrapItem } from './http'
+import { apiBaseURL, getToken, http, queryString, unwrapItem } from './http'
 import type { ImportCommitResult, ImportPreview, ImportRow } from './types'
 
 export interface ExportParams {
@@ -10,19 +10,39 @@ export interface ExportParams {
 
 export function exportRecords(params: ExportParams): void {
   const url = `${apiBaseURL()}/export${queryString(params)}`
+  const token = getToken()
+  const filename = params.format === 'json' ? 'harmony-export.json' : 'harmony-export.csv'
   // #ifdef H5
-  const link = document.createElement('a')
-  link.href = url
-  link.download = params.format === 'json' ? 'harmony-export.json' : 'harmony-export.csv'
-  link.rel = 'noopener'
-  document.body.appendChild(link)
-  link.click()
-  setTimeout(() => link.remove(), 0)
+  fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+    .then(async (res) => {
+      if (!res.ok) throw new Error(`导出失败（HTTP ${res.status}）`)
+      return res.blob()
+    })
+    .then((blob) => {
+      const objectUrl = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = objectUrl
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      setTimeout(() => {
+        link.remove()
+        URL.revokeObjectURL(objectUrl)
+      }, 0)
+    })
+    .catch((err) => {
+      uni.showToast({ title: err instanceof Error ? err.message : '导出失败', icon: 'none' })
+    })
   // #endif
   // #ifndef H5
   uni.downloadFile({
     url,
+    header: token ? { Authorization: `Bearer ${token}` } : {},
     success: (res) => {
+      if (res.statusCode !== 200) {
+        uni.showToast({ title: '导出失败', icon: 'none' })
+        return
+      }
       uni.openDocument({ filePath: res.tempFilePath, showMenu: true })
     },
   })
@@ -36,7 +56,10 @@ export function previewImportFile(file: File): Promise<ImportPreview> {
   return fetch(`${apiBaseURL()}/import/preview`, {
     method: 'POST',
     body: form,
-    headers: { 'X-Client-Platform': 'h5' },
+    headers: {
+      'X-Client-Platform': 'h5',
+      ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
+    },
   })
     .then((res) => res.json())
     .then((body) => {

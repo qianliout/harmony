@@ -631,7 +631,7 @@ function kindLabel(): string {
           {{ annotatedCount ? `有 ${annotatedCount} 条标注待整理` : `已录 ${recorded.length} 笔，均已保存` }}
         </text>
         <text class="leave__desc">
-          {{ annotatedCount ? '标注已保存在记录上，可以稍后统一整理成还礼。' : '离开页面不会丢失，之后可以在全部记录中找到。' }}
+          {{ annotatedCount ? '标注已保存在记录上，可以稍后统一整理成回礼。' : '离开页面不会丢失，之后可以在全部记录中找到。' }}
         </text>
         <view class="leave__actions">
           <view class="btn btn--secondary leave__btn" @click="showLeave = false">继续录入</view>

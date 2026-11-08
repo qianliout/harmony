@@ -1,6 +1,9 @@
 package api
 
 import (
+	"path/filepath"
+	"strings"
+
 	"github.com/gin-gonic/gin"
 
 	"harmony/component/recognize/service"
@@ -66,6 +69,29 @@ func (a *RecognizeAPI) List(c *gin.Context) {
 	)
 }
 
+func (a *RecognizeAPI) Image(c *gin.Context) {
+	id := utils.GetInt64FromQuery(c, "id")
+	expires := utils.GetInt64FromQuery(c, "exp")
+	sig := utils.GetStrFromQuery(c, "sig")
+	if id <= 0 || expires <= 0 || sig == "" {
+		response.JsonErr(c, response.New(403, "原图链接无效", "invalid image link"))
+		return
+	}
+	relative, err := a.srv.LoadImage(c.Request.Context(), uint64(id), expires, sig)
+	if err != nil {
+		response.JsonErr(c, err)
+		return
+	}
+	root := filepath.Clean(a.srv.UploadDir())
+	target := filepath.Clean(filepath.Join(root, relative))
+	if !strings.HasPrefix(target, root+string(filepath.Separator)) {
+		response.JsonErr(c, response.New(403, "原图路径无效", "invalid image path"))
+		return
+	}
+	c.Header("Cache-Control", "private, max-age=3600")
+	c.File(target)
+}
+
 func (a *RecognizeAPI) Commit(c *gin.Context) {
 	id := utils.GetInt64FromQuery(c, "id")
 	if id <= 0 {
@@ -83,6 +109,10 @@ func (a *RecognizeAPI) Commit(c *gin.Context) {
 		return
 	}
 	response.JsonOK(c, response.WithItem(result))
+}
+
+func RegisterPublicRoutes(group *gin.RouterGroup, api *RecognizeAPI) {
+	group.GET("/recognize/tasks/image", api.Image)
 }
 
 func RegisterRoutes(group *gin.RouterGroup, api *RecognizeAPI) {

@@ -6,6 +6,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
+	"harmony/infra/consts"
 	modelfilter "harmony/infra/model/filter"
 	"harmony/infra/model/record"
 	"harmony/infra/utils"
@@ -51,6 +52,12 @@ func (s *Store) List(db *gorm.DB, ownerID uint64, q record.Query, f *modelfilter
 
 func (s *Store) filtered(db *gorm.DB, ownerID uint64, q record.Query) *gorm.DB {
 	query := db.Model(&record.Record{}).Where("owner_id = ?", ownerID)
+	if q.BookCategory != "" {
+		query = query.Where("origin_book_id IN (SELECT id FROM book WHERE owner_id = ? AND category = ?)", ownerID, q.BookCategory)
+	}
+	if q.EventType != "" {
+		query = query.Where("event_id IN (SELECT id FROM event WHERE owner_id = ? AND type = ?)", ownerID, q.EventType)
+	}
 	if q.BookID > 0 {
 		query = query.Where("book_id = ?", q.BookID)
 	}
@@ -66,8 +73,13 @@ func (s *Store) filtered(db *gorm.DB, ownerID uint64, q record.Query) *gorm.DB {
 	if q.ItemKind != "" {
 		query = query.Where("item_kind = ?", q.ItemKind)
 	}
-	if q.Direction != "" {
-		query = query.Where("direction = ?", q.Direction)
+	direction := q.Direction
+	if q.Status != "" && direction == "" {
+		// 只选状态时按收礼处理，避免“未回礼”混入送礼记录。
+		direction = consts.DirectionIn
+	}
+	if direction != "" {
+		query = query.Where("direction = ?", direction)
 	}
 	if q.Status != "" {
 		query = query.Where("status = ?", q.Status)
@@ -130,14 +142,13 @@ func (s *Store) Delete(db *gorm.DB, ownerID uint64, id uint64) error {
 	return db.Where("owner_id = ? AND id = ?", ownerID, id).Delete(&record.Record{}).Error
 }
 
-func (s *Store) LockRecords(tx *gorm.DB, ownerID uint64, ids []uint64) ([]record.Record, error) {
+// GetRecordsInTx 在写事务内读取记录。SQLite 没有行锁，回礼并发由 _txlock=immediate 串行化。
+func (s *Store) GetRecordsInTx(tx *gorm.DB, ownerID uint64, ids []uint64) ([]record.Record, error) {
 	items := make([]record.Record, 0)
 	if len(ids) == 0 {
 		return items, nil
 	}
-	err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-		Where("owner_id = ? AND id IN ?", ownerID, ids).
-		Find(&items).Error
+	err := tx.Where("owner_id = ? AND id IN ?", ownerID, ids).Find(&items).Error
 	return items, err
 }
 

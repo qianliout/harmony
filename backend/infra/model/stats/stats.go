@@ -22,6 +22,15 @@ type KindStat struct {
 	RecordCount   int64  `json:"recordCount"`
 }
 
+type BookCategoryStat struct {
+	Category    string `json:"category"`
+	Label       string `json:"label"`
+	InCent      int64  `json:"inCent"`
+	OutCent     int64  `json:"outCent"`
+	Cent        int64  `json:"cent"`
+	RecordCount int64  `json:"recordCount"`
+}
+
 type EventTypeStat struct {
 	Type        string `json:"type"`
 	TypeLabel   string `json:"typeLabel"`
@@ -53,6 +62,7 @@ type Year struct {
 	RecordCount  int64          `json:"recordCount"`
 	PersonCount  int64          `json:"personCount"`
 	Monthly      []MonthStat    `json:"monthly"`
+	ByBookCategory []BookCategoryStat `json:"byBookCategory"`
 	ByItem       []KindStat     `json:"byItem"`
 	ByEventType  []EventTypeStat `json:"byEventType"`
 	TopPersons   []PersonStat   `json:"topPersons"`

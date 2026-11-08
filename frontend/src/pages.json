@@ -69,7 +69,7 @@
     {
       "root": "sub-misc",
       "pages": [
-        { "path": "pending", "style": { "navigationBarTitleText": "待还清单" } },
+        { "path": "pending", "style": { "navigationBarTitleText": "回礼清单" } },
         { "path": "search", "style": { "navigationBarTitleText": "搜索" } },
         { "path": "stats", "style": { "navigationBarTitleText": "统计" } },
         { "path": "transfer", "style": { "navigationBarTitleText": "导入导出" } },
@@ -81,7 +81,23 @@
     {
       "root": "sub-recognize",
       "pages": [
-        { "path": "index", "style": { "navigationBarTitleText": "识别礼簿" } }
+        { "path": "index", "style": { "navigationBarTitleText": "识别礼簿" } },
+        { "path": "history", "style": { "navigationBarTitleText": "识别历史" } }
+      ]
+    },
+    {
+      "root": "sub-auth",
+      "pages": [
+        { "path": "login", "style": { "navigationBarTitleText": "登录" } }
+      ]
+    }
+    // #endif
+    // #ifdef MP-WEIXIN
+    ,
+    {
+      "root": "sub-auth",
+      "pages": [
+        { "path": "confirm", "style": { "navigationBarTitleText": "确认登录" } }
       ]
     }
     // #endif

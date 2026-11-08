@@ -145,7 +145,7 @@ func (s *EventSrv) Create(ctx context.Context, param event.CreateParam) (*event.
 	}
 	if eventDate != nil {
 		parsed, _ := utils.ParseDate(*eventDate)
-		item.EventDate = &parsed
+		item.EventDate = utils.DatePtr(parsed)
 	}
 	if param.HostPersonID > 0 {
 		item.HostPersonID = &param.HostPersonID
@@ -205,7 +205,7 @@ func (s *EventSrv) Update(ctx context.Context, id uint64, param event.UpdatePara
 			return nil, response.BadRequest("日期格式不正确", "invalid date")
 		}
 		normalized := utils.NormalizeDate(parsed, precision)
-		item.EventDate = &normalized
+		item.EventDate = utils.DatePtr(normalized)
 	}
 	if param.HostPersonID > 0 {
 		if _, err := s.persons.Get(s.rdb.Get(), ownerID, param.HostPersonID); err != nil {
@@ -276,7 +276,7 @@ func (s *EventSrv) serializeMany(ownerID uint64, items []event.Event) ([]event.R
 			Name:          item.Name,
 			Type:          item.Type,
 			TypeLabel:     event.LabelOfType(item.Type),
-			EventDate:     utils.DateStringPtr(item.EventDate),
+			EventDate:     utils.DateStringOf(item.EventDate),
 			DatePrecision: item.DatePrecision,
 			Location:      item.Location,
 			Host:          item.Host,

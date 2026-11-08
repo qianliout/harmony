@@ -16,15 +16,21 @@ import { go, toast } from '@/utils/nav'
 
 const keyword = ref('')
 const quick = ref('all')
-const filters = ref<RecordFilters>({
-  bookId: 0,
-  eventId: 0,
-  itemKind: '',
-  direction: '',
-  status: '',
-  from: '',
-  to: '',
-})
+function emptyFilters(): RecordFilters {
+  return {
+    bookCategory: '',
+    eventType: '',
+    personId: 0,
+    bookId: 0,
+    eventId: 0,
+    itemKind: '',
+    direction: '',
+    status: '',
+    from: '',
+    to: '',
+  }
+}
+const filters = ref<RecordFilters>(emptyFilters())
 const filterShow = ref(false)
 const showSkeleton = ref(false)
 const initialized = ref(false)
@@ -32,17 +38,23 @@ let skeletonTimer: ReturnType<typeof setTimeout> | null = null
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 
 function queryFor(): RecordListParams {
-  const status = filters.value.status || (quick.value === 'pending' ? 'pending' : '')
+  const status = quick.value === 'pending' ? 'pending' : filters.value.status
   const direction =
-    filters.value.direction ||
-    (quick.value === 'in' ? 'in' : quick.value === 'out' ? 'out' : '')
+    quick.value === 'pending' || quick.value === 'in'
+      ? 'in'
+      : quick.value === 'out'
+        ? 'out'
+        : filters.value.direction
   return {
     keyword: keyword.value.trim() || undefined,
-    status: status || undefined,
-    direction: direction || undefined,
+    bookCategory: filters.value.bookCategory || undefined,
+    eventType: filters.value.eventType || undefined,
+    personId: filters.value.personId || undefined,
     bookId: filters.value.bookId || undefined,
     eventId: filters.value.eventId || undefined,
     itemKind: filters.value.itemKind || undefined,
+    status: status || undefined,
+    direction: direction || undefined,
     from: filters.value.from || undefined,
     to: filters.value.to || undefined,
   }
@@ -56,6 +68,9 @@ const list = usePagedList<RecordItem>(
 const activeFilterCount = computed(
   () =>
     [
+      filters.value.bookCategory,
+      filters.value.eventType,
+      filters.value.personId,
       filters.value.bookId,
       filters.value.eventId,
       filters.value.itemKind,
@@ -133,7 +148,7 @@ function applyFilters(value: RecordFilters): void {
 function resetFilters(): void {
   const previousQuick = quick.value
   keyword.value = ''
-  filters.value = { bookId: 0, eventId: 0, itemKind: '', direction: '', status: '', from: '', to: '' }
+  filters.value = emptyFilters()
   if (quick.value !== 'all') {
     suppressQuickWatch = true
     quick.value = 'all'
@@ -152,8 +167,15 @@ function createRecord(): void {
 onLoad((query) => {
   const parsed = (query ?? {}) as Record<string, string>
   const bookId = Number(parsed.bookId ?? 0)
-  if (bookId) {
-    filters.value = { ...filters.value, bookId }
+  const personId = Number(parsed.personId ?? 0)
+  filters.value = {
+    ...filters.value,
+    bookCategory: parsed.bookCategory ?? '',
+    eventType: parsed.eventType ?? '',
+    from: parsed.from ?? '',
+    to: parsed.to ?? '',
+    bookId,
+    personId,
   }
 })
 

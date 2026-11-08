@@ -17,6 +17,7 @@ import Money from '@/components/Money.vue'
 import RecordRow from '@/components/RecordRow.vue'
 import SectionCard from '@/components/SectionCard.vue'
 import Skeleton from '@/components/Skeleton.vue'
+import { useAuthStore } from '@/stores/auth'
 import { useContextStore } from '@/stores/context'
 import { paletteOf } from '@/styles/palette'
 import { themeVars } from '@/styles/theme'
@@ -24,6 +25,7 @@ import { preciseDateLabel, todayString, weekdayOf } from '@/utils/date'
 import { go, toast } from '@/utils/nav'
 
 const contextStore = useContextStore()
+const auth = useAuthStore()
 
 const greeting = computed(() => {
   const hour = new Date().getHours()
@@ -208,7 +210,10 @@ function openEventsTab(): void {
   go('/pages/book/list?tab=event')
 }
 
-onShow(loadHome)
+onShow(() => {
+  auth.loadMe().catch(() => undefined)
+  loadHome()
+})
 </script>
 
 <template>
@@ -249,7 +254,7 @@ onShow(loadHome)
             </view>
             <view class="stat__line" />
             <view class="stat__foot" @click="openPending">
-              <text class="stat__foot-label">待还 {{ pendingCount }} 笔</text>
+              <text class="stat__foot-label">未回礼 {{ pendingCount }} 笔</text>
               <text class="stat__foot-label"> · </text>
               <Money :cent="pendingCent" size="s" />
               <text class="stat__foot-arrow">›</text>
@@ -269,10 +274,10 @@ onShow(loadHome)
           <view class="gates">
             <view class="gate" @click="openPending">
               <view class="gate__icon" :style="gateStyle('amber')">
-                <text>还</text>
+                <text>回</text>
                 <text v-if="pendingCount" class="gate__badge">{{ pendingBadge }}</text>
               </view>
-              <text class="gate__label">待还</text>
+              <text class="gate__label">未回礼</text>
             </view>
             <view class="gate" @click="openEventsTab">
               <view class="gate__icon" :style="gateStyle('cinnabar')"><text>喜</text></view>
@@ -283,7 +288,7 @@ onShow(loadHome)
               <text class="gate__label">统计</text>
             </view>
             <!-- #ifdef H5 -->
-            <view class="gate" @click="go('/sub-recognize/index')">
+            <view v-if="auth.isAdmin" class="gate" @click="go('/sub-recognize/index')">
               <view class="gate__icon" :style="gateStyle('indigo')"><text>识</text></view>
               <text class="gate__label">识别礼簿</text>
             </view>

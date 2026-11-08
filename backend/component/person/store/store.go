@@ -1,14 +1,12 @@
 package store
 
 import (
-	"time"
 
 	"gorm.io/gorm"
 
 	modelfilter "harmony/infra/model/filter"
 	"harmony/infra/model/person"
 	"harmony/infra/model/record"
-	"harmony/infra/utils"
 )
 
 type Store struct{}
@@ -131,7 +129,7 @@ type summaryRow struct {
 	PendingCount int64     `gorm:"column:pending_count"`
 	PendingCent  int64     `gorm:"column:pending_cent"`
 	RecordCount  int64     `gorm:"column:record_count"`
-	LastDate     time.Time `gorm:"column:last_date"`
+	LastDate     string `gorm:"column:last_date"`
 }
 
 // Summaries 一条 GROUP BY 查询批量取得多个人的汇总，避免逐人查询。
@@ -163,7 +161,7 @@ func (s *Store) Summaries(db *gorm.DB, ownerID uint64, personIDs []uint64) (map[
 			PendingCount: row.PendingCount,
 			PendingCent:  row.PendingCent,
 			RecordCount:  row.RecordCount,
-			LastDate:     utils.DateString(row.LastDate),
+			LastDate:     row.LastDate,
 		}
 	}
 	return out, nil

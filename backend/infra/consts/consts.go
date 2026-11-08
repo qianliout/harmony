@@ -17,12 +17,6 @@ const (
 	ServerModeTest    = "test"
 )
 
-const (
-	DBDriverPostgres = "postgres"
-	DBDriverMySQL    = "mysql"
-	DBDriverSQLite   = "sqlite"
-)
-
 func ValidServerMode(mode string) bool {
 	switch mode {
 	case ServerModeDebug, ServerModeRelease, ServerModeTest:
@@ -31,13 +25,6 @@ func ValidServerMode(mode string) bool {
 	return false
 }
 
-func ValidDBDriver(driver string) bool {
-	switch driver {
-	case DBDriverPostgres, DBDriverMySQL, DBDriverSQLite:
-		return true
-	}
-	return false
-}
 
 // TimestampMilliThreshold 区分秒级与毫秒级时间戳：低于它的正值是统一毫秒前存下的秒级值。
 const TimestampMilliThreshold int64 = 1_000_000_000_000

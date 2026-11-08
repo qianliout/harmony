@@ -103,7 +103,7 @@ func (s *ViewSrv) PersonTimeline(ctx context.Context, q record.Query) (*view.Tim
 					ID:        eventItem.ID,
 					Name:      eventItem.Name,
 					Type:      eventItem.Type,
-					EventDate: utils.DateStringPtr(eventItem.EventDate),
+					EventDate: utils.DateStringOf(eventItem.EventDate),
 					Host:      eventItem.Host,
 					Location:  eventItem.Location,
 				},
@@ -266,7 +266,7 @@ func (s *ViewSrv) EventSummary(ctx context.Context, eventID uint64) (*view.Event
 			ID:        eventItem.ID,
 			Name:      eventItem.Name,
 			Type:      eventItem.Type,
-			EventDate: utils.DateStringPtr(eventItem.EventDate),
+			EventDate: utils.DateStringOf(eventItem.EventDate),
 			Host:      eventItem.Host,
 			Location:  eventItem.Location,
 		},
@@ -318,7 +318,7 @@ func (s *ViewSrv) Pending(ctx context.Context, kind string) (*view.PendingList, 
 			Person:    ref,
 			Count:     rows[i].Count,
 			TotalCent: rows[i].TotalCent,
-			Earliest:  utils.DateString(rows[i].Earliest),
+			Earliest:  rows[i].Earliest,
 		})
 		list.TotalCount += rows[i].Count
 		list.TotalCent += rows[i].TotalCent

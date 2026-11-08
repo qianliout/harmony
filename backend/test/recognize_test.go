@@ -8,7 +8,6 @@ import (
 	"harmony/infra/consts"
 	"harmony/infra/model/recognize"
 	"harmony/infra/model/record"
-	"harmony/infra/utils"
 )
 
 // TestRecognizeCommitRollback 对应 docs/02「识别回滚」：
@@ -117,7 +116,7 @@ func TestPaperRepay(t *testing.T) {
 	if created.HostPersonID == nil || *created.HostPersonID != personID {
 		t.Fatalf("expected event host person %d, got %v", personID, created.HostPersonID)
 	}
-	if created.EventDate == nil || utils.DateString(*created.EventDate) != "2011-10-01" {
+	if created.EventDate == nil || created.EventDate.String() != "2011-10-01" {
 		t.Fatalf("expected event date 2011-10-01, got %v", created.EventDate)
 	}
 	if created.DatePrecision != consts.DatePrecisionMonth {

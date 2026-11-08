@@ -4,6 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"harmony/component/search/service"
+	"harmony/infra/model/record"
 	"harmony/infra/response"
 	"harmony/infra/utils"
 )
@@ -28,10 +29,16 @@ func (a *SearchAPI) Search(c *gin.Context) {
 }
 
 func (a *SearchAPI) Records(c *gin.Context) {
-	query := utils.GetStrFromQuery(c, "q")
+	q := record.Query{
+		Keyword:      utils.GetStrFromQuery(c, "q"),
+		BookCategory: utils.GetStrFromQuery(c, "bookCategory"),
+		EventType:    utils.GetStrFromQuery(c, "eventType"),
+		From:         utils.GetStrFromQuery(c, "from"),
+		To:           utils.GetStrFromQuery(c, "to"),
+	}
 	page := utils.GetInt64FromQuery(c, "page")
 	pageSize := utils.GetInt64FromQuery(c, "pageSize")
-	items, total, err := a.srv.Records(c.Request.Context(), query, page, pageSize)
+	items, total, err := a.srv.Records(c.Request.Context(), q, page, pageSize)
 	if err != nil {
 		response.JsonErr(c, err)
 		return

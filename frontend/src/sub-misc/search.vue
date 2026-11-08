@@ -4,6 +4,7 @@ import { computed, nextTick, ref } from 'vue'
 
 import { searchAll, searchRecords } from '@/api/search'
 import type {
+  RecordFilters,
   RecordItem,
   SearchBookHit,
   SearchEventHit,
@@ -14,6 +15,8 @@ import type {
 import AppNav from '@/components/AppNav.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import EventSeal from '@/components/EventSeal.vue'
+import FilterBar from '@/components/FilterBar.vue'
+import FilterSheet from '@/components/FilterSheet.vue'
 import PersonAvatar from '@/components/PersonAvatar.vue'
 import RecordRow from '@/components/RecordRow.vue'
 import Skeleton from '@/components/Skeleton.vue'
@@ -39,6 +42,23 @@ const mode = ref<'results' | 'records'>('results')
 const activeSearch = ref('')
 const recent = ref<string[]>([])
 const expanded = ref<Record<GroupKey, boolean>>({ persons: false, events: false, books: false })
+const quick = ref('all')
+const filterShow = ref(false)
+function emptyFilters(): RecordFilters {
+  return {
+    bookCategory: '',
+    eventType: '',
+    personId: 0,
+    bookId: 0,
+    eventId: 0,
+    itemKind: '',
+    direction: '',
+    status: '',
+    from: '',
+    to: '',
+  }
+}
+const filters = ref<RecordFilters>(emptyFilters())
 
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 let focusTimer: ReturnType<typeof setTimeout> | null = null
@@ -53,8 +73,26 @@ const {
   load: loadRecordPage,
   loadMore: loadMoreRecords,
 } = usePagedList<SearchRecordHit>(
-  (page, pageSize) => searchRecords(activeSearch.value, page, pageSize),
+  (page, pageSize) =>
+    searchRecords({
+      q: activeSearch.value,
+      bookCategory: quick.value !== 'all' ? quick.value : filters.value.bookCategory || undefined,
+      eventType: filters.value.eventType || undefined,
+      from: filters.value.from || undefined,
+      to: filters.value.to || undefined,
+      page,
+      pageSize,
+    }),
   20,
+)
+
+const bookCategoryOptions = computed(() => [
+  { value: 'all', label: '全部' },
+  ...dict.categories.map((category) => ({ value: category.code, label: category.label })),
+])
+
+const activeFilterCount = computed(
+  () => [filters.value.eventType, filters.value.from, filters.value.to].filter(Boolean).length,
 )
 
 const highlightTerm = computed(() => {
@@ -326,6 +364,22 @@ function backToResults(): void {
   mode.value = 'results'
 }
 
+function applyFilters(next: RecordFilters): void {
+  filters.value = { ...next }
+  void loadRecordPage(true)
+}
+
+function resetFilters(): void {
+  filters.value = emptyFilters()
+  quick.value = 'all'
+  void loadRecordPage(true)
+}
+
+function onQuickChange(value: string): void {
+  quick.value = value
+  void loadRecordPage(true)
+}
+
 function rowRecord(hit: SearchRecordHit): RecordItem {
   if (hit.matchField === 'paperNote') {
     return { ...hit, paperNote: '' }
@@ -400,6 +454,14 @@ onUnload(() => {
         <text class="listhead__back" @click="backToResults">‹ 返回搜索结果</text>
         <text class="listhead__meta">{{ intentText }} · {{ recordTotal }} 条</text>
       </view>
+
+      <FilterBar
+        :quick="quick"
+        :count="activeFilterCount"
+        :options="bookCategoryOptions"
+        @update:quick="onQuickChange"
+        @open="filterShow = true"
+      />
 
       <Skeleton v-if="recordLoading && !recordItems.length" type="list" />
 
@@ -571,6 +633,14 @@ onUnload(() => {
         </template>
       </view>
     </template>
+
+    <FilterSheet
+      v-model:show="filterShow"
+      :value="filters"
+      mode="search"
+      @apply="applyFilters"
+      @reset="resetFilters"
+    />
   </view>
 </template>
 

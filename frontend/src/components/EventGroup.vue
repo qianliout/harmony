@@ -33,9 +33,11 @@ const dateLabel = computed(() => {
 })
 
 const hostLabel = computed(() => (props.group.event.host === 'self' ? '自家办' : '他家办'))
-const hasPending = computed(() => props.group.records.some((record) => record.status === 'pending'))
+const hasPending = computed(() =>
+  props.group.records.some((record) => record.direction === 'in' && record.status === 'pending' && !record.isRepay),
+)
 const selectableRecords = computed(() =>
-  props.group.records.filter((record) => record.direction === 'in' && record.status === 'pending'),
+  props.group.records.filter((record) => record.direction === 'in' && record.status === 'pending' && !record.isRepay),
 )
 const formula = computed(() => {
   if (props.group.records.length <= 1 || props.group.parts.length === 0) {
@@ -47,7 +49,11 @@ const formula = computed(() => {
 })
 
 function isDisabled(record: RecordItem): boolean {
-  return record.direction !== 'in' || record.status !== 'pending'
+  return record.direction !== 'in' || record.status !== 'pending' || record.isRepay
+}
+
+function isPendingRow(record: RecordItem): boolean {
+  return record.direction === 'in' && record.status === 'pending' && !record.isRepay
 }
 
 function onRow(record: RecordItem): void {
@@ -91,17 +97,23 @@ function dateOf(record: RecordItem): string {
       v-for="record in group.records"
       :key="record.id"
       class="line"
-      :class="{ 'line--pending': record.status === 'pending', 'line--disabled': selectable && isDisabled(record) }"
+      :class="{ 'line--pending': isPendingRow(record), 'line--disabled': selectable && isDisabled(record) }"
       @click="onRow(record)"
     >
-      <view v-if="record.status === 'pending'" class="line__bar" />
+      <view v-if="isPendingRow(record)" class="line__bar" />
       <view v-if="selectable" class="line__check" :class="{ 'line__check--on': selectedIds.includes(record.id) }">
         <text v-if="selectedIds.includes(record.id)">✓</text>
       </view>
       <DirTag :direction="record.direction" />
       <text class="line__book">{{ record.itemKindLabel }} · {{ record.bookName }}</text>
       <Money :cent="record.totalCent" :direction="record.direction" size="s" />
-      <StatusPill v-if="!selectable" :status="record.status" />
+      <StatusPill
+        v-if="!selectable"
+        :status="record.status"
+        :direction="record.direction"
+        :is-repay="record.isRepay"
+        :label="record.statusLabel"
+      />
       <text class="line__date">{{ dateOf(record) }}</text>
     </view>
 

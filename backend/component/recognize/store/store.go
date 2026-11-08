@@ -24,6 +24,23 @@ func (s *Store) Get(db *gorm.DB, ownerID uint64, id uint64) (*recognize.Task, er
 	return &task, nil
 }
 
+// CountToday 统计当天、当前 owner、状态不为 failed 的任务数，用于每日识别上限。
+func (s *Store) CountToday(db *gorm.DB, ownerID uint64, since time.Time) (int64, error) {
+	var count int64
+	err := db.Model(&recognize.Task{}).
+		Where("owner_id = ? AND created_at >= ? AND status <> ?", ownerID, since, "failed").
+		Count(&count).Error
+	return count, err
+}
+
+func (s *Store) GetByID(db *gorm.DB, id uint64) (*recognize.Task, error) {
+	var task recognize.Task
+	if err := db.Where("id = ?", id).First(&task).Error; err != nil {
+		return nil, err
+	}
+	return &task, nil
+}
+
 func (s *Store) List(db *gorm.DB, ownerID uint64, offset, limit int64) ([]recognize.Task, int64, error) {
 	query := db.Model(&recognize.Task{}).Where("owner_id = ?", ownerID)
 	var total int64

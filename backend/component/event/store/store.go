@@ -1,13 +1,13 @@
 package store
 
 import (
-	"time"
 
 	"gorm.io/gorm"
 
 	"harmony/infra/model/event"
 	modelfilter "harmony/infra/model/filter"
 	"harmony/infra/model/record"
+	"harmony/infra/utils"
 )
 
 type Store struct{}
@@ -45,11 +45,11 @@ func (s *Store) List(db *gorm.DB, ownerID uint64, q event.Query, f *modelfilter.
 	if q.Keyword != "" {
 		query = query.Where("name LIKE ?", "%"+q.Keyword+"%")
 	}
-	if from, err := parseDate(q.From); err == nil && from != nil {
-		query = query.Where("event_date >= ?", *from)
+	if from, err := utils.ParseDate(q.From); err == nil {
+		query = query.Where("event_date >= ?", utils.DateString(from))
 	}
-	if to, err := parseDate(q.To); err == nil && to != nil {
-		query = query.Where("event_date <= ?", *to)
+	if to, err := utils.ParseDate(q.To); err == nil {
+		query = query.Where("event_date <= ?", utils.DateString(to))
 	}
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
@@ -92,7 +92,7 @@ func (s *Store) Recent(db *gorm.DB, ownerID uint64, limit int) ([]event.Event, e
 	}
 	ordered := make([]event.Event, 0, len(ids))
 	for _, id := range ids {
-		if item, ok := byID[id]; ok {
+		if item, ok := byID[id]; ok && !item.Placeholder {
 			ordered = append(ordered, item)
 		}
 	}
@@ -196,13 +196,3 @@ func (s *Store) Aggregates(db *gorm.DB, ownerID uint64, eventIDs []uint64) (map[
 	return out, nil
 }
 
-func parseDate(value string) (*time.Time, error) {
-	if value == "" {
-		return nil, nil
-	}
-	parsed, err := time.ParseInLocation("2006-01-02", value, time.Local)
-	if err != nil {
-		return nil, err
-	}
-	return &parsed, nil
-}

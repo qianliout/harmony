@@ -25,3 +25,15 @@ frontend/.env.*.local
 backend/data/
 backend/web/dist/*
 !backend/web/dist/.keep
+
+# 微信开发者工具在本机生成的配置
+frontend/project.config.json
+project.config.json
+project.private.config.json
+frontend/project.private.config.json
+
+# 识别真实样张只在本机保存
+backend/test/testdata/recognize/*.jpg
+backend/test/testdata/recognize/*.png
+backend/test/testdata/recognize/*.json
+!backend/test/testdata/recognize/README.md

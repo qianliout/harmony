@@ -1,10 +1,21 @@
 <script setup lang="ts">
-withDefaults(
+import { computed } from 'vue'
+
+const props = withDefaults(
   defineProps<{
     quick: string
     count?: number
+    options?: { value: string; label: string }[]
   }>(),
-  { count: 0 },
+  {
+    count: 0,
+    options: () => [
+      { value: 'all', label: '全部' },
+      { value: 'pending', label: '未回礼' },
+      { value: 'in', label: '收' },
+      { value: 'out', label: '送' },
+    ],
+  },
 )
 
 defineEmits<{
@@ -12,19 +23,14 @@ defineEmits<{
   open: []
 }>()
 
-const options = [
-  { value: 'all', label: '全部' },
-  { value: 'pending', label: '待还' },
-  { value: 'in', label: '收' },
-  { value: 'out', label: '送' },
-]
+const items = computed(() => props.options)
 </script>
 
 <template>
   <view class="bar">
     <view class="bar__chips">
       <text
-        v-for="option in options"
+        v-for="option in items"
         :key="option.value"
         class="chip chip--flat"
         :class="{ 'chip--flat-on': quick === option.value }"
@@ -52,6 +58,10 @@ const options = [
   gap: 8px;
   flex: 1;
   overflow-x: auto;
+}
+
+.bar__chips .chip {
+  flex: none;
 }
 
 .bar__filter {

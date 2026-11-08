@@ -1,20 +1,34 @@
 server:
+  host: "127.0.0.1"
   port: 8080
   mode: "debug"
 
-# 本机 MySQL：OrbStack 容器 mysql（~/work/docker/mysql），库 harmony 需先创建，见 README。
 database:
-  driver: "mysql"
-  dsn: "root:root@tcp(127.0.0.1:3306)/harmony?charset=utf8mb4&parseTime=True&loc=Local"
+  path: "data/harmony.db"
 
 storage:
   uploadDir: "data/uploads"
 
-# 识别：默认走 DeepSeek 的 OpenAI 兼容接口；apiKey 由 HARMONY_RECOGNIZE_API_KEY 或 DEEPSEEK_API_KEY 注入，不写进文件。
+# 识别：百炼通义千问视觉模型（OpenAI 兼容协议）；API Key 由 DASHSCOPE_API_KEY 等环境变量注入。
 recognize:
-  provider: "deepseek"
-  baseURL: "https://api.deepseek.com/v1"
+  provider: "qwen"
+  baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1"
   apiKey: ""
-  model: "deepseek-chat"
-  timeoutSeconds: 60
+  model: "qwen3-vl-plus"
+  timeoutSeconds: 90
   temperature: 0
+  highResolution: true
+  dailyLimit: 100
+
+auth:
+  adminUserIds: [1]
+  mpTokenDays: 30
+  webTokenDays: 14
+
+wechat:
+  appID: "wx348e5ad03f9cd6ba"
+  envVersion: "develop"
+
+backup:
+  dir: "data/backups"
+  keepDays: 7

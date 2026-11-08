@@ -27,15 +27,22 @@ const keyword = ref('')
 const filterShow = ref(false)
 const menuShow = ref(false)
 
-const filters = ref<RecordFilters>({
-  bookId: 0,
-  eventId: 0,
-  itemKind: '',
-  direction: '',
-  status: '',
-  from: '',
-  to: '',
-})
+function emptyFilters(): RecordFilters {
+  return {
+    bookCategory: '',
+    eventType: '',
+    personId: 0,
+    bookId: 0,
+    eventId: 0,
+    itemKind: '',
+    direction: '',
+    status: '',
+    from: '',
+    to: '',
+  }
+}
+
+const filters = ref<RecordFilters>(emptyFilters())
 
 let skeletonTimer: ReturnType<typeof setTimeout> | null = null
 let searchTimer: ReturnType<typeof setTimeout> | null = null
@@ -51,12 +58,20 @@ const {
   loadMore,
 } = usePagedList<RecordItem>((page, pageSize) => {
   const status = quick.value === 'pending' ? 'pending' : filters.value.status
-  const direction = quick.value === 'in' || quick.value === 'out' ? quick.value : filters.value.direction
+  const direction =
+    quick.value === 'pending' || quick.value === 'in'
+      ? 'in'
+      : quick.value === 'out'
+        ? 'out'
+        : filters.value.direction
   return fetchRecords({
     bookId: isMerged.value ? undefined : bookId.value,
     originBookId: isMerged.value ? bookId.value : undefined,
     page,
     pageSize,
+    eventType: filters.value.eventType,
+    personId: filters.value.personId,
+    eventId: filters.value.eventId,
     itemKind: filters.value.itemKind,
     direction,
     status,
@@ -84,7 +99,9 @@ const categoryColors = computed(() => paletteOf(book.value?.categoryColor || 'st
 const hasActiveFilters = computed(
   () =>
     Boolean(
-      filters.value.itemKind ||
+      filters.value.eventType ||
+        filters.value.personId ||
+        filters.value.itemKind ||
         filters.value.direction ||
         filters.value.status ||
         filters.value.from ||
@@ -95,6 +112,8 @@ const hasActiveFilters = computed(
 )
 const activeFilterCount = computed(() => {
   let count = 0
+  if (filters.value.eventType) count += 1
+  if (filters.value.personId) count += 1
   if (filters.value.itemKind) count += 1
   if (filters.value.direction) count += 1
   if (filters.value.status) count += 1
@@ -178,13 +197,13 @@ function clearKeyword(): void {
 }
 
 function applyFilters(next: RecordFilters): void {
-  filters.value = { ...next, bookId: bookId.value }
+  filters.value = { ...next, bookCategory: '', bookId: bookId.value }
   quick.value = 'all'
   refreshRecords()
 }
 
 function resetFilters(): void {
-  filters.value = { bookId: bookId.value, eventId: 0, itemKind: '', direction: '', status: '', from: '', to: '' }
+  filters.value = { ...emptyFilters(), bookId: bookId.value }
   quick.value = 'all'
   keyword.value = ''
   refreshRecords()
@@ -404,6 +423,8 @@ onPullDownRefresh(async () => {
       v-model:show="filterShow"
       :value="filters"
       :count="total"
+      hide-book-category
+      hide-book
       @apply="applyFilters"
       @reset="resetFilters"
     />

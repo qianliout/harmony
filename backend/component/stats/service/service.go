@@ -59,12 +59,17 @@ func (s *StatsSrv) Year(ctx context.Context, year int64) (*stats.Year, error) {
 		year = int64(time.Now().Year())
 	}
 	ownerID := middleware.OwnerID(ctx)
-	start, end := utils.YearRange(year)
+	startTime, endTime := utils.YearRange(year)
+	start, end := utils.DateString(startTime), utils.DateString(endTime)
 	totals, err := s.store.Totals(s.rdb.Get(), ownerID, start, end)
 	if err != nil {
 		return nil, err
 	}
 	monthlyRows, err := s.store.Monthly(s.rdb.Get(), ownerID, start, end)
+	if err != nil {
+		return nil, err
+	}
+	categoryRows, err := s.store.ByBookCategory(s.rdb.Get(), ownerID, start, end)
 	if err != nil {
 		return nil, err
 	}
@@ -110,6 +115,17 @@ func (s *StatsSrv) Year(ctx context.Context, year int64) (*stats.Year, error) {
 		}
 	}
 
+	byCategory := make([]stats.BookCategoryStat, 0, len(categoryRows))
+	for _, row := range categoryRows {
+		byCategory = append(byCategory, stats.BookCategoryStat{
+			Category:    row.Category,
+			Label:       labelOr(categoryLabels, row.Category),
+			InCent:      row.InCent,
+			OutCent:     row.OutCent,
+			Cent:        row.TotalCent,
+			RecordCount: row.RecordCount,
+		})
+	}
 	byItem := make([]stats.KindStat, 0, len(itemRows))
 	for _, row := range itemRows {
 		byItem = append(byItem, stats.KindStat{
@@ -166,8 +182,9 @@ func (s *StatsSrv) Year(ctx context.Context, year int64) (*stats.Year, error) {
 		NetCent:     totals.InCent - totals.OutCent,
 		RecordCount: totals.RecordCount,
 		PersonCount: totals.PersonCount,
-		Monthly:     monthly,
-		ByItem:      byItem,
+		Monthly:        monthly,
+		ByBookCategory: byCategory,
+		ByItem:         byItem,
 		ByEventType: byType,
 		TopPersons:  topPersons,
 		ByBook:      byBook,

@@ -55,17 +55,6 @@ const yearOptions = Array.from({ length: 50 }, (_, index) => currentYear - index
 const yearLabels = yearOptions.map((year) => `${year} 年`)
 const monthOptions = ['不填月', ...Array.from({ length: 12 }, (_, index) => `${index + 1} 月`)]
 const dayOptions = ['不填日', ...Array.from({ length: 31 }, (_, index) => `${index + 1} 日`)]
-const festivalOptions = [
-  { label: '正月', month: 2 },
-  { label: '二月二', month: 2 },
-  { label: '五一', month: 5 },
-  { label: '端午', month: 6 },
-  { label: '中秋', month: 9 },
-  { label: '国庆', month: 10 },
-  { label: '腊月', month: 1 },
-  { label: '过年', month: 2 },
-]
-
 const activeDraft = computed(() => drafts.value[active.value] ?? null)
 const currentItems = computed(() => activeDraft.value?.items ?? [])
 
@@ -191,15 +180,6 @@ function onDayChange(event: Event): void {
   if (activeDraft.value) activeDraft.value.day = index
 }
 
-function applyFestival(month: number, isLayue: boolean): void {
-  if (!activeDraft.value) return
-  if (isLayue) {
-    activeDraft.value.year += 1
-  }
-  activeDraft.value.month = month
-  activeDraft.value.day = 0
-}
-
 function onEventNameInput(event: Event): void {
   if (activeDraft.value) activeDraft.value.eventName = (event as unknown as { detail: { value: string } }).detail.value
 }
@@ -255,7 +235,7 @@ async function saveAll(): Promise<void> {
     return
   }
   if (drafts.value.length === 0) {
-    error.value = '请先填写还礼信息'
+    error.value = '请先填写回礼信息'
     return
   }
   saving.value = true
@@ -265,7 +245,7 @@ async function saveAll(): Promise<void> {
     for (const draft of drafts.value) {
       const items = buildItems(draft)
       if (items.length === 0) {
-        error.value = '每次还礼至少填写一个金额'
+        error.value = '每次回礼至少填写一个金额'
         return
       }
       const occurredOn = dateOf(draft)
@@ -332,7 +312,7 @@ watch(
     <view class="sheet">
       <view class="sheet__head">
         <view>
-          <text class="sheet__title">补录还礼 · {{ record?.personName }}</text>
+          <text class="sheet__title">补录回礼 · {{ record?.personName }}</text>
           <text v-if="record" class="sheet__sub">原记录 {{ record.direction === 'in' ? '收' : '送' }} {{ formatCent(record.totalCent) }}<text v-if="record.paperPage"> · 第 {{ record.paperPage }} 页</text></text>
         </view>
         <text class="sheet__close" @click="visible = false">关闭</text>
@@ -344,14 +324,14 @@ watch(
           class="note"
           :value="note"
           auto-height
-          placeholder="照抄纸本上的手写还礼标注"
+          placeholder="照抄纸本上的手写回礼标注"
           @input="onNoteInput"
         />
         <text v-if="parsing" class="hint">正在解析标注…</text>
 
         <view v-if="onlyMark" class="only-mark">
-          <text class="only-mark__title">这条标注只有已还记号</text>
-          <text class="only-mark__desc">保存后只把原记录标为已还，不生成送礼记录。</text>
+          <text class="only-mark__title">这条标注只有已回礼记号</text>
+          <text class="only-mark__desc">保存后只把原记录标为已回礼，不生成送礼记录。</text>
         </view>
 
         <template v-else>
@@ -367,7 +347,7 @@ watch(
             </text>
             <text class="tab tab--add" @click="addDraft">＋</text>
           </view>
-          <text v-if="drafts.length > 1" class="hint">标注里有 {{ drafts.length }} 次还礼，逐次核对</text>
+          <text v-if="drafts.length > 1" class="hint">标注里有 {{ drafts.length }} 次回礼，逐次核对</text>
 
           <view v-if="activeDraft" class="form">
             <view class="field-row">
@@ -384,17 +364,6 @@ watch(
                 </picker>
               </view>
             </view>
-            <view class="festivals">
-              <text
-                v-for="festival in festivalOptions"
-                :key="festival.label"
-                class="chip chip--flat"
-                @click="applyFestival(festival.month, festival.label === '腊月')"
-              >
-                {{ festival.label }}
-              </text>
-            </view>
-
             <view class="field-row">
               <text class="label">对方事项</text>
               <input
@@ -430,9 +399,9 @@ watch(
 
             <view class="switch-row" @click="markRepaid = !markRepaid">
               <view class="switch" :class="{ 'switch--on': markRepaid }"><view class="switch__dot" /></view>
-              <text class="switch__label">同时把原记录标为已还</text>
+              <text class="switch__label">同时把原记录标为已回礼</text>
             </view>
-            <text v-if="!markRepaid" class="hint">部分还礼时可关闭，原记录保持待还</text>
+            <text v-if="!markRepaid" class="hint">部分回礼时可关闭，原记录保持未回礼</text>
           </view>
         </template>
 
@@ -441,9 +410,9 @@ watch(
       </scroll-view>
 
       <view class="sheet__actions">
-        <view class="btn btn--secondary sheet__btn" @click="markOnly">只标记已还</view>
+        <view class="btn btn--secondary sheet__btn" @click="markOnly">只标记已回礼</view>
         <view v-if="!onlyMark" class="btn btn--primary sheet__btn" @click="saveAll">
-          {{ saving ? '保存中…' : `保存${drafts.length > 1 ? ` ${drafts.length} 次` : ''}还礼` }}
+          {{ saving ? '保存中…' : `保存${drafts.length > 1 ? ` ${drafts.length} 次` : ''}回礼` }}
         </view>
       </view>
     </view>
@@ -590,14 +559,6 @@ watch(
   background: var(--c-fill);
   font-size: 13px;
   color: var(--c-ink-1);
-}
-
-.festivals {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
-  padding-left: 60px;
 }
 
 .input {

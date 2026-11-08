@@ -1,5 +1,30 @@
 <script setup lang="ts">
-// 应用根组件：只承载全局样式；页面由 pages.json 声明，H5 与小程序共用。
+// 应用根组件：承载全局样式与启动登录；页面由 pages.json 声明，H5 与小程序共用。
+import { onLaunch } from '@dcloudio/uni-app'
+
+import { getToken } from '@/api/http'
+import { useAuthStore } from '@/stores/auth'
+
+onLaunch(() => {
+  const auth = useAuthStore()
+  auth.configureHttp()
+
+  // #ifdef MP-WEIXIN
+  auth.wxLogin().catch(() => {
+    uni.showToast({ title: '登录失败，下拉重试', icon: 'none' })
+  })
+  // #endif
+
+  // #ifdef H5
+  if (!getToken()) {
+    uni.reLaunch({ url: '/sub-auth/login' })
+    return
+  }
+  auth.loadMe().catch(() => {
+    // 401 已由请求层跳到登录页。
+  })
+  // #endif
+})
 </script>
 
 <style lang="scss">
@@ -32,6 +57,13 @@ page {
     margin: 0 auto;
     transform: translateZ(0);
     box-shadow: var(--shadow-float);
+  }
+}
+
+/* 识别页与识别历史在宽屏下临时解除手机画布限制。 */
+@media (min-width: 1024px) {
+  html.layout-wide uni-app {
+    max-width: 1280px;
   }
 }
 /* #endif */

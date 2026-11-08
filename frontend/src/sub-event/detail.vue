@@ -152,7 +152,7 @@ function recordsOf(person: EventPerson): number {
 
 function personMeta(person: EventPerson): string {
   let text = `${recordsOf(person)} 笔 · ${booksOf(person)} 个礼簿`
-  if (person.pendingCount) text += ` · 待还 ${person.pendingCount} 笔`
+  if (person.pendingCount) text += ` · 未回礼 ${person.pendingCount} 笔`
   return text
 }
 
@@ -251,12 +251,12 @@ async function repay(person: EventPerson): Promise<void> {
   try {
     const ids = await fetchAllPendingIds(person.person.id)
     if (!ids.length) {
-      toast('没有待还的记录')
+      toast('没有未回礼的记录')
       return
     }
     go(`/sub-record/form?mode=repay&originIds=${ids.join(',')}`)
   } catch (err) {
-    toast(err instanceof Error ? err.message : '打开还礼失败')
+    toast(err instanceof Error ? err.message : '打开回礼失败')
   } finally {
     loadingRepay.value = 0
   }
@@ -379,7 +379,7 @@ onShow(() => {
                   class="repay-btn"
                   @click.stop="repay(person)"
                 >
-                  {{ loadingRepay === person.person.id ? '…' : '还礼' }}
+                  {{ loadingRepay === person.person.id ? '…' : '回礼' }}
                 </view>
                 <text v-else-if="detailsOf(person).length > 1" class="person-expand">
                   {{ expandedPerson === person.person.id ? '收起' : '展开' }}

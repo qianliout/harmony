@@ -36,7 +36,7 @@ const relationOptions = [{ code: '', label: '全部' }, ...relations]
 const sortOptions: Array<{ code: SortKey; label: string }> = [
   { code: 'recent', label: '最近往来' },
   { code: 'name', label: '姓名' },
-  { code: 'pending', label: '待还优先' },
+  { code: 'pending', label: '未回礼优先' },
 ]
 const sortLabel = computed(() => sortOptions.find((item) => item.code === sort.value)?.label ?? '最近往来')
 const hasFilter = computed(() => Boolean(keyword.value.trim() || relation.value))
@@ -242,7 +242,7 @@ onShow(load)
                 <view class="person__meta">
                   <text v-if="person.lastDate">最近 {{ formatDate(person.lastDate) }}</text>
                   <text v-else>还没有往来</text>
-                  <text v-if="person.pendingCount" class="person__pending"> · {{ person.pendingCount }} 笔待还</text>
+                  <text v-if="person.pendingCount" class="person__pending"> · {{ person.pendingCount }} 笔未回礼</text>
                 </view>
               </view>
               <view class="person__money">

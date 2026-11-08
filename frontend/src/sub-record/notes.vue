@@ -52,9 +52,9 @@ function draftComplete(draft: PaperDraft): boolean {
 }
 
 function previewText(item: NoteItem): string {
-  if (item.onlyMark) return '只有已还记号'
+  if (item.onlyMark) return '只有已回礼记号'
   const first = item.drafts[0]
-  if (!first) return '未能解析出还礼'
+  if (!first) return '未能解析出回礼'
   const parts: string[] = []
   if (item.drafts.length > 1) parts.push(`${item.drafts.length} 次`)
   parts.push(preciseDateLabel(first.occurredOn, first.datePrecision || 'day') || '时间待补')
@@ -159,9 +159,9 @@ function onSaved(count: number, cent: number): void {
   }
   activeRecord.value = null
   if (count > 0) {
-    toast(`已补录 ${count} 笔还礼 · ${formatCent(cent)}`, 'success')
+    toast(`已补录 ${count} 笔回礼 · ${formatCent(cent)}`, 'success')
   } else {
-    toast('已标记为已还', 'success')
+    toast('已标记为已回礼', 'success')
   }
 }
 
@@ -200,7 +200,7 @@ async function batchRepay(): Promise<void> {
   const ok = await openConfirmSheet({
     kind: 'batch-repay',
     title: `一键补录 ${targets.length} 条`,
-    message: `合计 ${formatCent(totalCent)}，将逐条生成还礼记录并把原记录标为已还。`,
+    message: `合计 ${formatCent(totalCent)}，将逐条生成回礼记录并把原记录标为已回礼。`,
     conflicts: preview,
     confirmText: `补录 ${targets.length} 条`,
   })
@@ -227,7 +227,7 @@ async function batchRepay(): Promise<void> {
   if (failed > 0) {
     toast(`已补录 ${settled.length} 条，${failed} 条失败`)
   } else {
-    toast(`已补录 ${settled.length} 条还礼`, 'success')
+    toast(`已补录 ${settled.length} 条回礼`, 'success')
   }
 }
 </script>

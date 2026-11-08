@@ -275,7 +275,7 @@ func (s *BookSrv) Merge(ctx context.Context, param book.MergeParam) (*book.Merge
 
 	var logRow book.MergeLogRow
 	err = s.rdb.Transaction(func(tx *gorm.DB) error {
-		locked, err := s.store.LockBooks(tx, ownerID, append(ids, target.ID))
+		locked, err := s.store.GetBooksInTx(tx, ownerID, append(ids, target.ID))
 		if err != nil {
 			return err
 		}

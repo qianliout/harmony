@@ -52,7 +52,10 @@ const RELATION_LABELS: Record<string, string> = {
 }
 
 const relationLabel = computed(() => RELATION_LABELS[props.record.personRelation] ?? '其他')
-const isPending = computed(() => props.record.status === 'pending')
+const isPending = computed(
+  () => props.record.direction === 'in' && props.record.status === 'pending' && !props.record.isRepay,
+)
+const isRepay = computed(() => Boolean(props.record.isRepay))
 const giftOnly = computed(() => props.record.amountCent === 0 && Boolean(props.record.giftName))
 const hasGift = computed(() => props.record.giftValueCent > 0)
 
@@ -101,7 +104,12 @@ function onClick(): void {
       />
       <text v-else class="row__gift">{{ record.giftName }}</text>
       <text v-if="giftOnly && record.giftValueCent" class="row__gift-value">估 ¥{{ (record.giftValueCent / 100).toFixed(0) }}</text>
-      <StatusPill :status="record.status" />
+      <StatusPill
+        :status="record.status"
+        :direction="record.direction"
+        :is-repay="isRepay"
+        :label="record.statusLabel"
+      />
       <text v-if="hasGift && !giftOnly" class="row__gift-hint">含礼品</text>
     </view>
   </view>

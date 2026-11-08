@@ -3,6 +3,8 @@ import type { EventSummary, PendingList, Timeline } from './types'
 
 export interface TimelineParams {
   personId: number
+  bookCategory?: string
+  eventType?: string
   bookId?: number
   eventId?: number
   itemKind?: string

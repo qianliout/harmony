@@ -19,7 +19,9 @@ func NewRecordAPI(srv *service.RecordSrv) *RecordAPI {
 
 func (a *RecordAPI) List(c *gin.Context) {
 	q := record.Query{
-		BookID:    uint64(utils.GetInt64FromQuery(c, "bookId")),
+		BookID:       uint64(utils.GetInt64FromQuery(c, "bookId")),
+		BookCategory: utils.GetStrFromQuery(c, "bookCategory"),
+		EventType:    utils.GetStrFromQuery(c, "eventType"),
 		OriginBookID: uint64(utils.GetInt64FromQuery(c, "originBookId")),
 		PersonID:  uint64(utils.GetInt64FromQuery(c, "personId")),
 		EventID:   uint64(utils.GetInt64FromQuery(c, "eventId")),

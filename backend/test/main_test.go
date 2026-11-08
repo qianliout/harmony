@@ -7,13 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
+	"path/filepath"
 	"testing"
 
-	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
-	gormlogger "gorm.io/gorm/logger"
 
+	authservice "harmony/component/auth/service"
+	authstore "harmony/component/auth/store"
 	bookservice "harmony/component/book/service"
 	bookstore "harmony/component/book/store"
 	"harmony/component/config"
@@ -38,78 +38,57 @@ import (
 	"harmony/infra/model/book"
 	"harmony/infra/model/event"
 	"harmony/infra/model/person"
+	"harmony/infra/middleware"
 	"harmony/infra/model/record"
 	"harmony/infra/rdb"
 	"harmony/infra/response"
-)
-
-const (
-	testDBName = "harmony_test"
-	serverDSN  = "root:root@tcp(127.0.0.1:3306)/?charset=utf8mb4&parseTime=True&loc=Local"
-	testDSN    = "root:root@tcp(127.0.0.1:3306)/" + testDBName + "?charset=utf8mb4&parseTime=True&loc=Local"
+	"harmony/migrate"
 )
 
 // testDB 是包级连接；每个用例从它开启事务，互不污染。
-var testDB *gorm.DB
+var (
+	testDB  *gorm.DB
+	tempDir string
+)
 
 func TestMain(m *testing.M) {
-	if err := setupTestDB(); err != nil {
-		fmt.Fprintf(os.Stderr, "setup test database: %v\n", err)
+	dir, err := os.MkdirTemp("", "harmony-test-*")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "create temp dir: %v\n", err)
 		os.Exit(1)
 	}
-	os.Exit(m.Run())
+	tempDir = dir
+	if err := setupTestDB(); err != nil {
+		fmt.Fprintf(os.Stderr, "setup test database: %v\n", err)
+		_ = os.RemoveAll(dir)
+		os.Exit(1)
+	}
+	code := m.Run()
+	_ = os.RemoveAll(dir)
+	os.Exit(code)
 }
 
 func setupTestDB() error {
-	silent := gormlogger.Default.LogMode(gormlogger.Silent)
-	server, err := gorm.Open(mysql.Open(serverDSN), &gorm.Config{Logger: silent})
+	database, err := rdb.Open(filepath.Join(tempDir, "harmony-test.db"))
 	if err != nil {
-		return fmt.Errorf("connect mysql server: %w", err)
+		return fmt.Errorf("open sqlite test database: %w", err)
 	}
-	if err := server.Exec("DROP DATABASE IF EXISTS " + testDBName).Error; err != nil {
-		return fmt.Errorf("drop database: %w", err)
-	}
-	if err := server.Exec("CREATE DATABASE " + testDBName + " CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci").Error; err != nil {
-		return fmt.Errorf("create database: %w", err)
-	}
-
-	db, err := gorm.Open(mysql.Open(testDSN), &gorm.Config{Logger: silent})
-	if err != nil {
-		return fmt.Errorf("connect %s: %w", testDBName, err)
-	}
-	if err := execSchema(db); err != nil {
+	db := database.Get()
+	if err := db.Transaction(func(tx *gorm.DB) error {
+		for _, statement := range migrate.Statements() {
+			if err := tx.Exec(statement).Error; err != nil {
+				snippet := statement
+				if len(snippet) > 80 {
+					snippet = snippet[:80]
+				}
+				return fmt.Errorf("exec %q: %w", snippet, err)
+			}
+		}
+		return nil
+	}); err != nil {
 		return err
 	}
 	testDB = db
-	return nil
-}
-
-// execSchema 按分号切分 schema 快照逐条执行，并跳过 -- 注释行。
-func execSchema(db *gorm.DB) error {
-	raw, err := os.ReadFile("../migrate/mysql/schema.sql")
-	if err != nil {
-		return fmt.Errorf("read schema: %w", err)
-	}
-	lines := make([]string, 0)
-	for _, line := range strings.Split(string(raw), "\n") {
-		if strings.HasPrefix(strings.TrimSpace(line), "--") {
-			continue
-		}
-		lines = append(lines, line)
-	}
-	for _, statement := range strings.Split(strings.Join(lines, "\n"), ";") {
-		statement = strings.TrimSpace(statement)
-		if statement == "" {
-			continue
-		}
-		if err := db.Exec(statement).Error; err != nil {
-			snippet := statement
-			if len(snippet) > 80 {
-				snippet = snippet[:80]
-			}
-			return fmt.Errorf("exec %q: %w", snippet, err)
-		}
-	}
 	return nil
 }
 
@@ -128,6 +107,7 @@ type harness struct {
 	searchStore    *searchstore.Store
 	settingStore   *settingstore.Store
 	recognizeStore *recognizestore.Store
+	authStore      *authstore.Store
 
 	dictSrv      *dictservice.DictSrv
 	personSrv    *personservice.PersonSrv
@@ -139,6 +119,7 @@ type harness struct {
 	searchSrv    *searchservice.SearchSrv
 	settingSrv   *settingservice.SettingSrv
 	recognizeSrv *recognizeservice.RecognizeSrv
+	authSrv      *authservice.AuthSrv
 }
 
 func newHarness(t *testing.T) *harness {
@@ -153,7 +134,7 @@ func newHarness(t *testing.T) *harness {
 		}
 	})
 
-	database := rdb.New(tx, "mysql")
+	database := rdb.New(tx, "sqlite")
 	h := &harness{
 		t:              t,
 		tx:             tx,
@@ -167,6 +148,7 @@ func newHarness(t *testing.T) *harness {
 		searchStore:    searchstore.New(),
 		settingStore:   settingstore.New(),
 		recognizeStore: recognizestore.New(),
+		authStore:      authstore.New(),
 	}
 	h.dictSrv = dictservice.NewDictSrv(database, h.dictStore)
 	h.personSrv = personservice.NewPersonSrv(database, h.personStore)
@@ -177,11 +159,22 @@ func newHarness(t *testing.T) *harness {
 	h.viewSrv = viewservice.NewViewSrv(database, h.viewStore, h.recordStore, h.recordSrv, h.personStore, h.eventStore, h.settingStore)
 	h.statsSrv = statsservice.NewStatsSrv(database, h.statsStore, h.viewSrv, h.personStore, h.bookStore, h.dictStore)
 	h.searchSrv = searchservice.NewSearchSrv(database, h.searchStore, h.recordSrv)
-	h.recognizeSrv = recognizeservice.NewRecognizeSrv(database, h.recognizeStore, h.recordSrv, h.personStore, h.recordStore, nil, config.RecognizeConfig{}, t.TempDir())
+	h.recognizeSrv = recognizeservice.NewRecognizeSrv(database, h.recognizeStore, h.recordSrv, h.personStore, h.recordStore, nil, nil, config.RecognizeConfig{}, t.TempDir())
+	authCfg := config.Default()
+	authCfg.Server.Mode = "debug"
+	authCfg.Auth.Secret = "test-secret-at-least-32-characters-long"
+	authCfg.Auth.AdminUserIDs = []uint64{1}
+	authSrv, err := authservice.NewAuthSrv(database, h.authStore, &fakeWechat{}, *authCfg)
+	requireOK(t, err)
+	h.authSrv = authSrv
 	return h
 }
 
-func (h *harness) ctx() context.Context { return context.Background() }
+func (h *harness) ctx() context.Context { return h.ctxAs(1) }
+
+func (h *harness) ctxAs(ownerID uint64) context.Context {
+	return middleware.WithOwner(context.Background(), ownerID)
+}
 
 // createPerson 通过 service 建亲友，返回 id。
 func (h *harness) createPerson(name string) uint64 {

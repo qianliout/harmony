@@ -3,9 +3,8 @@ import { onShow, onUnload } from '@dcloudio/uni-app'
 import { computed, ref } from 'vue'
 
 import { fetchYearStats, fetchYears } from '@/api/stats'
-import type { BookStat, KindStat, MonthStat, YearStats } from '@/api/types'
+import type { BookCategoryStat, BookStat, EventTypeStat, MonthStat, YearStats } from '@/api/types'
 import AppNav from '@/components/AppNav.vue'
-import DirTag from '@/components/DirTag.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import EventSeal from '@/components/EventSeal.vue'
 import Money from '@/components/Money.vue'
@@ -58,12 +57,12 @@ const monthMax = computed(() => {
   return max
 })
 
-const itemRows = computed<KindStat[]>(() =>
-  [...(stats.value?.byItem ?? [])].sort((a, b) => b.cent - a.cent),
+const categoryRows = computed<BookCategoryStat[]>(() =>
+  [...(stats.value?.byBookCategory ?? [])].sort((a, b) => b.cent - a.cent),
 )
-const itemMax = computed(() => {
+const categoryMax = computed(() => {
   let max = 1
-  for (const item of itemRows.value) {
+  for (const item of categoryRows.value) {
     max = Math.max(max, item.cent)
   }
   return max
@@ -162,9 +161,9 @@ function barHeight(cent: number): string {
   return `${Math.max((cent / monthMax.value) * 100, 3)}%`
 }
 
-function itemWidth(cent: number): string {
+function categoryWidth(cent: number): string {
   if (cent <= 0) return '0%'
-  return `${Math.max((cent / itemMax.value) * 100, 4)}%`
+  return `${Math.max((cent / categoryMax.value) * 100, 4)}%`
 }
 
 function typeWidth(cent: number): string {
@@ -172,12 +171,23 @@ function typeWidth(cent: number): string {
   return `${Math.max((cent / eventMax.value) * 100, 4)}%`
 }
 
-function directionOf(value: string): 'in' | 'out' {
-  return value === 'in' ? 'in' : 'out'
-}
-
 function bookColor(book: BookStat): string {
   return paletteOf(dict.categoryColor(book.book.category)).main
+}
+
+const yearRange = computed(() => ({
+  from: `${year.value}-01-01`,
+  to: `${year.value}-12-31`,
+}))
+
+function openCategoryRow(item: BookCategoryStat): void {
+  const params = `bookCategory=${encodeURIComponent(item.category)}&from=${yearRange.value.from}&to=${yearRange.value.to}`
+  go(`/sub-record/list?${params}`)
+}
+
+function openEventTypeRow(item: EventTypeStat): void {
+  const params = `eventType=${encodeURIComponent(item.type)}&from=${yearRange.value.from}&to=${yearRange.value.to}`
+  go(`/sub-record/list?${params}`)
 }
 
 function openPerson(id: number): void {
@@ -316,27 +326,30 @@ onUnload(stopSkeleton)
           </view>
         </SectionCard>
 
-        <SectionCard title="按名目">
-          <view v-if="!itemRows.length" class="empty-tip">这一年还没有名目数据</view>
-          <view v-for="item in itemRows" :key="`${item.itemKind}-${item.direction}`" class="bar-row">
+        <SectionCard title="按礼簿类别">
+          <view v-if="!categoryRows.length" class="empty-tip">这一年还没有礼簿数据</view>
+          <view
+            v-for="item in categoryRows"
+            :key="item.category"
+            class="bar-row bar-row--tap"
+            @click="openCategoryRow(item)"
+          >
             <view class="bar-row__label">
-              <text class="bar-row__name">{{ item.itemKindLabel }}</text>
-              <DirTag :direction="item.direction" />
+              <text class="bar-row__name">{{ item.label }}</text>
             </view>
             <view class="bar-row__track">
               <view
                 class="bar-row__fill"
-                :class="directionOf(item.direction) === 'in' ? 'bar-row__fill--in' : 'bar-row__fill--out'"
-                :style="{ width: itemWidth(item.cent) }"
+                :style="{ width: categoryWidth(item.cent), background: paletteOf(dict.categoryColor(item.category)).main }"
               />
             </view>
-            <Money :cent="item.cent" :direction="directionOf(item.direction)" size="s" compact />
+            <Money :cent="item.cent" size="s" compact />
           </view>
         </SectionCard>
 
         <SectionCard title="按事项类型">
           <view v-if="!eventTypeStats.length" class="empty-tip">这一年还没有事项数据</view>
-          <view v-for="item in eventTypeStats" :key="item.type" class="type-row">
+          <view v-for="item in eventTypeStats" :key="item.type" class="type-row" @click="openEventTypeRow(item)">
             <EventSeal :type="item.type" size="s" />
             <view class="type-row__main">
               <view class="type-row__head">
@@ -662,14 +675,6 @@ onUnload(stopSkeleton)
 .bar-row__fill {
   height: 100%;
   border-radius: var(--r-full);
-}
-
-.bar-row__fill--in {
-  background: var(--c-in);
-}
-
-.bar-row__fill--out {
-  background: var(--c-out);
 }
 
 .type-row {

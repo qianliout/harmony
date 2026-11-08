@@ -48,12 +48,19 @@ type PageCheckStore interface {
 	UpsertPageCheck(db *gorm.DB, ownerID uint64, bookID uint64, page string, declaredCent int64) error
 }
 
+// ImageSigner 为原图生成签名 URL，并校验签名、有效期与 owner。
+type ImageSigner interface {
+	SignImage(taskID, ownerID uint64) string
+	VerifyImage(taskID, ownerID uint64, expires int64, sig string) bool
+}
+
 type RecognizeSrv struct {
 	rdb      *rdb.RDB
 	store    *store.Store
 	records  RecordWriter
 	persons  PersonStore
 	pages    PageCheckStore
+	signer   ImageSigner
 	provider Recognizer
 	cfg      config.RecognizeConfig
 	uploadDir string
@@ -67,6 +74,7 @@ func NewRecognizeSrv(
 	recordSrv *recordservice.RecordSrv,
 	personStore PersonStore,
 	pageStore PageCheckStore,
+	signer ImageSigner,
 	provider Recognizer,
 	cfg config.RecognizeConfig,
 	uploadDir string,
@@ -77,6 +85,7 @@ func NewRecognizeSrv(
 		records:   recordSrv,
 		persons:   personStore,
 		pages:     pageStore,
+		signer:    signer,
 		provider:  provider,
 		cfg:       cfg,
 		uploadDir: uploadDir,
@@ -98,6 +107,17 @@ func (s *RecognizeSrv) CreateTask(ctx context.Context, file io.Reader) (*recogni
 		return nil, response.BadGateway("识别服务还没配置 API Key，先在环境变量里配置")
 	}
 	ownerID := middleware.OwnerID(ctx)
+	if s.cfg.DailyLimit > 0 {
+		now := time.Now()
+		start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+		used, err := s.store.CountToday(s.rdb.Get(), ownerID, start)
+		if err != nil {
+			return nil, err
+		}
+		if used >= s.cfg.DailyLimit {
+			return nil, response.BadRequest("今天的识别次数已用完", "daily recognition limit reached")
+		}
+	}
 	data, err := io.ReadAll(io.LimitReader(file, maxImageSize+1))
 	if err != nil {
 		return nil, response.BadRequest("读取图片失败", "read image failed")
@@ -146,8 +166,8 @@ func (s *RecognizeSrv) CreateTask(ctx context.Context, file io.Reader) (*recogni
 	}
 	imageData := append([]byte(nil), data...)
 	go s.runTask(task.ID, ownerID, Image{Data: imageData, MIME: mime})
-	s.log.Info(ctx).Uint64("taskId", task.ID).Int("size", len(data)).Msg("recognize.create")
-	return buildResp(task, taskPayload{Items: []recognize.Item{}}), nil
+	s.log.Info(ctx).Uint64("taskId", task.ID).Int("size", len(data)).Bool("apiKeySet", s.cfg.APIKey != "").Msg("recognize.create")
+	return s.buildResp(task, taskPayload{Items: []recognize.Item{}}), nil
 }
 
 func (s *RecognizeSrv) runTask(taskID uint64, ownerID uint64, img Image) {
@@ -321,7 +341,7 @@ func (s *RecognizeSrv) Detail(ctx context.Context, id uint64) (*recognize.Resp, 
 		}
 		return nil, err
 	}
-	return buildResp(task, parsePayload(task.Items)), nil
+	return s.buildResp(task, parsePayload(task.Items)), nil
 }
 
 func (s *RecognizeSrv) List(ctx context.Context, page, pageSize int64) ([]recognize.Resp, int64, error) {
@@ -338,7 +358,7 @@ func (s *RecognizeSrv) List(ctx context.Context, page, pageSize int64) ([]recogn
 	}
 	out := make([]recognize.Resp, 0, len(tasks))
 	for i := range tasks {
-		out = append(out, *buildResp(&tasks[i], parsePayload(tasks[i].Items)))
+		out = append(out, *s.buildResp(&tasks[i], parsePayload(tasks[i].Items)))
 	}
 	return out, total, nil
 }
@@ -469,18 +489,45 @@ func (s *RecognizeSrv) Commit(ctx context.Context, id uint64, param recognize.Co
 	return result, nil
 }
 
+// UploadDir 返回原图根目录，供 API 安全拼接文件路径。
+func (s *RecognizeSrv) UploadDir() string {
+	return s.uploadDir
+}
+
 func (s *RecognizeSrv) FailStale(ctx context.Context) error {
 	return s.store.FailStale(s.rdb.Get())
 }
 
-func buildResp(task *recognize.Task, payload taskPayload) *recognize.Resp {
+// LoadImage 校验签名并返回原图相对路径；调用方负责限制在 uploadDir 内。
+func (s *RecognizeSrv) LoadImage(ctx context.Context, id uint64, expires int64, sig string) (string, error) {
+	if s.signer == nil {
+		return "", response.New(403, "原图不可访问", "image access denied")
+	}
+	task, err := s.store.GetByID(s.rdb.Get(), id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return "", response.NotFound("识别任务不存在")
+		}
+		return "", err
+	}
+	if !s.signer.VerifyImage(id, task.OwnerID, expires, sig) {
+		return "", response.New(403, "原图链接无效或已过期", "invalid image signature")
+	}
+	return task.ImagePath, nil
+}
+
+func (s *RecognizeSrv) buildResp(task *recognize.Task, payload taskPayload) *recognize.Resp {
+	imageURL := ""
+	if s.signer != nil {
+		imageURL = s.signer.SignImage(task.ID, task.OwnerID)
+	}
 	return &recognize.Resp{
 		ID:            task.ID,
 		Status:        task.Status,
 		Provider:      task.Provider,
 		Model:         task.Model,
 		ImagePath:     task.ImagePath,
-		ImageURL:      "/uploads/" + strings.ReplaceAll(task.ImagePath, string(os.PathSeparator), "/"),
+		ImageURL:      imageURL,
 		ImageSHA256:   task.ImageSHA256,
 		ImageSize:     task.ImageSize,
 		ErrorMessage:  task.ErrorMessage,

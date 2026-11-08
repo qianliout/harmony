@@ -1,7 +1,7 @@
 package store
 
 import (
-	"time"
+	"fmt"
 
 	"gorm.io/gorm"
 
@@ -48,8 +48,8 @@ func (s *Store) Events(db *gorm.DB, ownerID uint64, keyword string, limit int) (
 }
 
 func (s *Store) EventsByYear(db *gorm.DB, ownerID uint64, year int64, limit int) ([]search.EventHit, int64, error) {
-	start := time.Date(int(year), 1, 1, 0, 0, 0, 0, time.Local)
-	end := start.AddDate(1, 0, 0)
+	start := fmt.Sprintf("%04d-01-01", year)
+	end := fmt.Sprintf("%04d-01-01", year+1)
 	query := db.Table("event").
 		Where("owner_id = ? AND placeholder = 0 AND event_date >= ? AND event_date < ?", ownerID, start, end)
 	var total int64
