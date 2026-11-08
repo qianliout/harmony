@@ -1,4 +1,7 @@
-# pnpm 12 起构建脚本白名单在此声明；esbuild 与 vue-demi 的安装脚本是构建必需。
+# pnpm 12 起构建脚本白名单在此声明：esbuild 的安装脚本是构建必需；
+# core-js 的安装脚本只打印赞助信息，显式拒绝以免安装报错。
 allowBuilds:
   esbuild: true
   vue-demi: true
+  core-js: false
+  core-js-pure: false

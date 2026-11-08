@@ -2,7 +2,7 @@ server:
   port: 8080
   mode: "debug"
 
-# 本机阶段用 SQLite 单文件库，启动目录即 backend/，数据落在 backend/harmony.db。
+# 本机 MySQL：OrbStack 容器 mysql（~/work/docker/mysql），库 harmony 需先创建，见 README。
 database:
-  driver: "sqlite"
-  dsn: "harmony.db"
+  driver: "mysql"
+  dsn: "root:root@tcp(127.0.0.1:3306)/harmony?charset=utf8mb4&parseTime=True&loc=Local"

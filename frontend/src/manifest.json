@@ -1,0 +1,24 @@
+{
+  "name": "人情往来账本",
+  "appid": "",
+  "description": "人情往来账本",
+  "versionName": "0.1.0",
+  "versionCode": "100",
+  "h5": {
+    "title": "人情往来账本",
+    "router": {
+      "mode": "hash"
+    }
+  },
+  "mp-weixin": {
+    "appid": "",
+    "setting": {
+      "urlCheck": false,
+      "es6": true,
+      "minified": true
+    },
+    "usingComponents": true,
+    "lazyCodeLoading": "requiredComponents"
+  },
+  "vueVersion": "3"
+}

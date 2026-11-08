@@ -1,0 +1,4 @@
+/* uni-app 会把本文件自动注入每个页面与组件的 <style lang="scss">，只放 SCSS 变量，不放会产出 CSS 的规则。 */
+$font-sans: -apple-system, "PingFang SC", "HarmonyOS Sans SC", "MiSans", "Microsoft YaHei", sans-serif;
+$font-serif: "Songti SC", "STSong", "Noto Serif SC", "Source Han Serif SC", serif;
+$font-num: "DIN Alternate", "SF Pro Display", "Roboto", $font-sans;

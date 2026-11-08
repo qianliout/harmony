@@ -1,20 +1,13 @@
-import { fileURLToPath, URL } from 'node:url'
-
-import vue from '@vitejs/plugin-vue'
+import uni from '@dcloudio/vite-plugin-uni'
 import { defineConfig, loadEnv } from 'vite'
 
-// 开发服务器把 /api 代理到本机后端（REST 契约统一前缀 /api/v1），目标地址可用
-// VITE_PROXY_TARGET 覆盖（见 .env.example），缺省 http://localhost:8080。
+// H5 开发服务器把 /api 代理到本机后端（REST 前缀 /api/v1），目标地址可用 VITE_PROXY_TARGET 覆盖。
+// 小程序不走代理，直连 VITE_MP_API_BASE，见 src/api/http.ts。
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd())
 
   return {
-    plugins: [vue()],
-    resolve: {
-      alias: {
-        '@': fileURLToPath(new URL('./src', import.meta.url)),
-      },
-    },
+    plugins: [uni()],
     server: {
       port: 5173,
       proxy: {

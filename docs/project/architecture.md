@@ -2,7 +2,7 @@
 
 ## 现状
 
-当前是项目骨架：后端只有配置、数据库连接、日志、统一响应与健康检查；前端只有应用外壳与调用健康检查的工作台。业务组件按 `fen.md` 逐个补齐，不预留空目录或占位实现。
+当前是项目骨架：后端只有配置、数据库连接、日志、统一响应与健康检查；前端是 uni-app 工程，只有调用健康检查的工作台页。业务组件按 `fen.md` 逐个补齐，不预留空目录或占位实现。
 
 ## 后端
 
@@ -33,7 +33,7 @@ Gin 路由 → component/<domain>/api → component/<domain>/service → compone
 
 配置默认值在 `component/config`，本机值在 `configs/config-local.yaml`，可用 `SERVER_PORT`、`SERVER_MODE`、`DATABASE_DRIVER`、`DATABASE_DSN` 覆盖。YAML 使用严格模式，未知键会阻止启动。
 
-本机默认使用 SQLite 单文件库，DSN 为 `harmony.db`，文件落在启动目录。`infra/rdb` 同时支持 postgres 与 mysql，新增业务表时按目标数据库在 `backend/migrate/<driver>/` 维护全量建表快照；服务启动不自动迁移。
+本机默认使用 MySQL（OrbStack 容器 `mysql`，库 `harmony`，root/root）。`infra/rdb` 同时支持 sqlite 与 postgres，新增业务表时在 `backend/migrate/mysql/` 维护全量建表快照；服务启动不自动迁移。表结构设计见 `docs/01-数据库设计.md`。
 
 ## 日志与响应
 
@@ -43,28 +43,29 @@ HTTP 响应统一使用 `infra/response` 信封：传输层恒为 HTTP 200，业
 
 ## 前端
 
-启动链路：
+uni-app（Vue 3 + TypeScript + Vite）+ wot-design-uni，一套代码产出 H5（Web 端）与微信小程序。启动链路：
 
 ```text
-index.html → src/main.ts → router/index.ts → 自动收集 modules/*/index.ts 的 routes → AppLayout → 模块页面
+index.html → src/main.ts（createSSRApp + Pinia）→ src/pages.json 声明的页面 → 页面根节点 wd-config-provider 注入主题
 ```
 
-模块约定：
+约定：
 
-- 页面路由在 `src/modules/<name>/router.ts`，`index.ts` 重新导出为 `routes`，由 `import.meta.glob` 自动收集。
-- API 调用在 `src/modules/<name>/api/`，统一经过 `src/core/request`。
-- 页面按手机尺寸设计，`AppLayout` 在桌面浏览器中居中为 480px 画布。
-- 颜色、字号、圆角通过 `src/styles/index.css` 覆盖 Element Plus 变量；语义色只用于状态表达。
+- 页面在 `src/pages.json` 中声明；主包只放 tab 页，其余页面放分包。
+- API 调用在 `src/api/<领域>.ts`，统一经过 `src/api/http.ts`（基于 `uni.request`，H5 走 Vite 代理，小程序直连）。
+- 平台差异只用条件编译表达；图片识别相关代码只出现在 `#ifdef H5` 分支，小程序产物中不得包含。
+- 颜色、字号、间距只引用 `src/styles/tokens.scss` 的 token，主题变量在 `src/styles/theme.ts`；桌面浏览器中 H5 居中为 430px 画布。
+- 交互与视觉规范见 `docs/03-前端交互与UI规范.md`，原型见 `docs/project/index.html`。
 
 ## 后续业务模块
 
-| 模块 | 后端组件 | 前端模块 | 对应需求 |
+| 模块 | 后端组件 | 前端页面 | 对应需求 |
 | --- | --- | --- | --- |
-| 本子 | `component/book` | `modules/books` | 本子增删改查、合并 |
-| 人 | `component/person` | `modules/persons` | 人增删改查、跨本子时间线 |
-| 事项 | `component/event` | `modules/events` | 事项增删改查、按人聚合 |
-| 记录与还礼 | `component/record` | `modules/records` | 记账、连续录入、还礼关联 |
-| 待还与统计 | `component/ledger` | `modules/ledger` | 待还清单、按年/人/事项/本子统计 |
-| 图片识别 | `component/recognition` | `modules/recognition` | 上传、识别、核对、批量写入 |
+| 本子 | `component/book` | `pages/book`、`sub-book/*` | 本子增删改查、合并 |
+| 人 | `component/person` | `pages/person`、`sub-person/*` | 人增删改查、跨本子时间线 |
+| 事项 | `component/event` | `sub-event/*` | 事项增删改查、按人聚合 |
+| 记录与还礼 | `component/record` | `sub-record/*` | 记账、连续录入、还礼关联 |
+| 待还与统计 | `component/ledger` | `sub-misc/pending`、`sub-misc/stats` | 待还清单、按年/人/事项/本子统计 |
+| 图片识别 | `component/recognition` | `sub-recognize/*`（仅 H5） | 上传、识别、核对、批量写入 |
 
-新增业务时先建 model 与建表 SQL，再按 store、service、api、前端模块的顺序落地。
+新增业务时先建 model 与建表 SQL，再按 store、service、api、前端页面的顺序落地。

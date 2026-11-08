@@ -28,13 +28,13 @@ type DatabaseConfig struct {
 // Global 是全局配置，由 Load 填充。
 var Global = Default()
 
-// Default 返回默认配置：debug 模式监听 8080，使用本机 SQLite 文件。
+// Default 返回默认配置：debug 模式监听 8080，连接本机 MySQL 的 harmony 库（OrbStack 容器 mysql，root/root）。
 func Default() *Config {
 	return &Config{
 		Server: ServerConfig{Port: 8080, Mode: consts.ServerModeDebug},
 		Database: DatabaseConfig{
-			Driver: consts.DBDriverSQLite,
-			DSN:    "harmony.db",
+			Driver: consts.DBDriverMySQL,
+			DSN:    "root:root@tcp(127.0.0.1:3306)/harmony?charset=utf8mb4&parseTime=True&loc=Local",
 		},
 	}
 }

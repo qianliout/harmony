@@ -1,33 +1,41 @@
 {
-  "name": "harmony-web",
+  "name": "harmony-app",
   "private": true,
   "version": "0.1.0",
-  "type": "module",
-  "description": "人情往来账本 Web 端：Vue 3 + TypeScript + Element Plus",
-  "engines": {
-    "node": ">=18",
-    "pnpm": ">=12"
+  "description": "人情往来账本：uni-app（Vue 3 + TypeScript）一套代码产出 H5（Web 端）与微信小程序",
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": "22.20.0",
+      "onFail": "download"
+    }
   },
   "scripts": {
-    "dev": "vite",
-    "build": "vue-tsc --noEmit && vite build",
-    "preview": "vite preview",
-    "type-check": "vue-tsc --noEmit"
+    "dev:h5": "uni",
+    "build:h5": "uni build",
+    "dev:mp-weixin": "uni -p mp-weixin",
+    "build:mp-weixin": "uni build -p mp-weixin",
+    "type-check": "vue-tsc --noEmit",
+    "build": "vue-tsc --noEmit && uni build && uni build -p mp-weixin"
   },
   "dependencies": {
-    "@element-plus/icons-vue": "^2.3.1",
-    "axios": "^1.7.7",
-    "dayjs": "^1.11.13",
-    "element-plus": "^2.8.4",
-    "pinia": "^2.2.4",
-    "vue": "^3.5.12",
-    "vue-router": "^4.4.5"
+    "@dcloudio/uni-app": "3.0.0-5030320261023001",
+    "@dcloudio/uni-components": "3.0.0-5030320261023001",
+    "@dcloudio/uni-h5": "3.0.0-5030320261023001",
+    "@dcloudio/uni-mp-weixin": "3.0.0-5030320261023001",
+    "pinia": "2.2.4",
+    "vue": "3.4.21",
+    "wot-design-uni": "1.14.0"
   },
   "devDependencies": {
-    "@types/node": "^22.7.5",
-    "@vitejs/plugin-vue": "^5.1.4",
-    "typescript": "~5.6.3",
-    "vite": "^5.4.8",
-    "vue-tsc": "^2.1.6"
+    "@dcloudio/types": "3.4.31",
+    "@dcloudio/uni-cli-shared": "3.0.0-5030320261023001",
+    "@dcloudio/uni-stacktracey": "3.0.0-5030320261023001",
+    "@dcloudio/vite-plugin-uni": "3.0.0-5030320261023001",
+    "@vue/tsconfig": "0.5.1",
+    "sass": "1.77.8",
+    "typescript": "5.4.5",
+    "vite": "5.2.8",
+    "vue-tsc": "2.0.29"
   }
 }
