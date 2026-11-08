@@ -27,13 +27,13 @@ import (
 )
 
 type ViewSrv struct {
-	rdb     *rdb.RDB
-	store   *viewstore.Store
-	records *recordstore.Store
+	rdb       *rdb.RDB
+	store     *viewstore.Store
+	records   *recordstore.Store
 	recordSrv *recordservice.RecordSrv
-	persons *personstore.Store
-	events  *eventstore.Store
-	settings *settingstore.Store
+	persons   *personstore.Store
+	events    *eventstore.Store
+	settings  *settingstore.Store
 }
 
 func NewViewSrv(
@@ -46,13 +46,13 @@ func NewViewSrv(
 	settingStore *settingstore.Store,
 ) *ViewSrv {
 	return &ViewSrv{
-		rdb:      database,
-		store:    viewStore,
-		records:  recordStore,
+		rdb:       database,
+		store:     viewStore,
+		records:   recordStore,
 		recordSrv: recordSrv,
-		persons:  personStore,
-		events:   eventStore,
-		settings: settingStore,
+		persons:   personStore,
+		events:    eventStore,
+		settings:  settingStore,
 	}
 }
 
