@@ -30,8 +30,9 @@ import (
 )
 
 const (
-	clientMP = "mp"
-	clientH5 = "h5"
+	clientMP  = "mp"
+	clientH5  = "h5"
+	clientDev = "dev"
 
 	ticketWaiting   = "waiting"
 	ticketScanned   = "scanned"
@@ -56,14 +57,14 @@ type ticketEntry struct {
 }
 
 type AuthSrv struct {
-	rdb    *rdb.RDB
-	store  *store.Store
-	wechat WechatClient
-	cfg    config.AuthConfig
+	rdb       *rdb.RDB
+	store     *store.Store
+	wechat    WechatClient
+	cfg       config.AuthConfig
 	wechatCfg config.WechatConfig
-	secret []byte
-	admins map[uint64]bool
-	log    *logger.Logger
+	secret    []byte
+	admins    map[uint64]bool
+	log       *logger.Logger
 
 	ticketMu sync.Mutex
 	tickets  map[string]*ticketEntry
@@ -365,14 +366,19 @@ func (s *AuthSrv) Me(ctx context.Context, userID uint64, rawToken string) (*auth
 		}
 		return nil, err
 	}
-	token, err := s.store.GetTokenByHash(s.rdb.Get(), hashToken(rawToken))
-	if err != nil {
-		return nil, response.Unauthorized("登录已失效")
+	// 免登录（devUserId）请求不带令牌，客户端标记为 dev。
+	client := clientDev
+	if rawToken != "" {
+		token, err := s.store.GetTokenByHash(s.rdb.Get(), hashToken(rawToken))
+		if err != nil {
+			return nil, response.Unauthorized("登录已失效")
+		}
+		client = token.Client
 	}
 	return &auth.MeResp{
 		User:    userResp(user, s.IsAdmin(userID)),
 		IsAdmin: s.IsAdmin(userID),
-		Client:  token.Client,
+		Client:  client,
 	}, nil
 }
 

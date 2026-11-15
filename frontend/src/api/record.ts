@@ -5,6 +5,7 @@ import type {
   PaperParseResult,
   RecordDetail,
   RecordItem,
+  RecordSummary,
   RepayItem,
 } from './types'
 
@@ -14,6 +15,7 @@ export interface RecordListParams {
   bookId?: number
   originBookId?: number
   personId?: number
+  personKeyword?: string
   eventId?: number
   itemKind?: string
   direction?: string
@@ -25,10 +27,25 @@ export interface RecordListParams {
   pageSize?: number
 }
 
-export function fetchRecords(params: RecordListParams = {}): Promise<Page<RecordItem>> {
+export interface RecordPage extends Page<RecordItem> {
+  summary: RecordSummary
+}
+
+export function fetchRecords(params: RecordListParams = {}): Promise<RecordPage> {
   return http
     .get<RecordItem[]>('/records', { page: 1, pageSize: 20, ...params })
-    .then(unwrapPage)
+    .then((body) => {
+      const page = unwrapPage<RecordItem>(body)
+      return {
+        ...page,
+        summary: (page.custom?.summary as RecordSummary | undefined) ?? {
+          count: page.total,
+          inCent: 0,
+          outCent: 0,
+          pendingCent: 0,
+        },
+      }
+    })
 }
 
 export function fetchRecordDetail(id: number): Promise<RecordDetail> {

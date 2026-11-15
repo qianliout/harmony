@@ -6,6 +6,14 @@ export interface ExportParams {
   bookId?: number
   eventId?: number
   personId?: number
+  bookCategory?: string
+  eventType?: string
+  itemKind?: string
+  personKeyword?: string
+  direction?: string
+  status?: string
+  from?: string
+  to?: string
 }
 
 export function exportRecords(params: ExportParams): void {

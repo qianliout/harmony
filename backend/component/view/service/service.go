@@ -18,6 +18,7 @@ import (
 	"harmony/infra/consts"
 	"harmony/infra/middleware"
 	"harmony/infra/model/event"
+	modelfilter "harmony/infra/model/filter"
 	"harmony/infra/model/person"
 	"harmony/infra/model/record"
 	"harmony/infra/model/view"
@@ -227,14 +228,19 @@ func (s *ViewSrv) EventSummary(ctx context.Context, eventID uint64) (*view.Event
 			}
 		} else {
 			entry.OutCent += item.TotalCent
+			if item.IsRepay {
+				entry.RepayCount++
+				entry.RepayCent += item.TotalCent
+			}
 		}
-		key := detailKey(item.PersonID, item.BookID, item.ItemKind, item.Direction)
+		key := detailKey(item.PersonID, item.BookID, item.ItemKind, item.Direction, item.IsRepay)
 		index, ok := detailIndex[key]
 		if !ok {
 			entry.Details = append(entry.Details, view.PersonDetailLine{
 				BookName:      item.BookName,
 				ItemKindLabel: item.ItemKindLabel,
 				Direction:     item.Direction,
+				IsRepay:       item.IsRepay,
 				RecordIDs:     []uint64{},
 			})
 			index = len(entry.Details) - 1
@@ -275,8 +281,8 @@ func (s *ViewSrv) EventSummary(ctx context.Context, eventID uint64) (*view.Event
 	}, nil
 }
 
-func detailKey(personID, bookID uint64, itemKind, direction string) string {
-	return strconv.FormatUint(personID, 10) + "|" + strconv.FormatUint(bookID, 10) + "|" + itemKind + "|" + direction
+func detailKey(personID, bookID uint64, itemKind, direction string, isRepay bool) string {
+	return strconv.FormatUint(personID, 10) + "|" + strconv.FormatUint(bookID, 10) + "|" + itemKind + "|" + direction + "|" + strconv.FormatBool(isRepay)
 }
 
 func (s *ViewSrv) Pending(ctx context.Context, kind string) (*view.PendingList, error) {
@@ -310,22 +316,56 @@ func (s *ViewSrv) Pending(ctx context.Context, kind string) (*view.PendingList, 
 	for i := range persons {
 		personByID[persons[i].ID] = persons[i]
 	}
+
+	// 一次查出该方向的待还记录，序列化后按人分组，避免逐人查询。
+	direction := consts.DirectionIn
+	if kind == "owing" {
+		direction = consts.DirectionOut
+	}
+	items, total, err := s.records.List(s.rdb.Get(), ownerID,
+		record.Query{Direction: direction, Status: consts.RecordStatusPending},
+		&modelfilter.Filter{Offset: 0, Limit: pendingRecordLimit})
+	if err != nil {
+		return nil, err
+	}
+	resps, err := s.recordSrv.Serialize(ctx, items)
+	if err != nil {
+		return nil, err
+	}
+	recordsByPerson := make(map[uint64][]record.Resp, len(rows))
+	for i := range resps {
+		// 回礼生成的送礼记录不是别人欠我的人情，序列化后再兜底过滤。
+		if direction == consts.DirectionOut && resps[i].IsRepay {
+			continue
+		}
+		recordsByPerson[resps[i].PersonID] = append(recordsByPerson[resps[i].PersonID], resps[i])
+	}
+
 	list := view.PendingList{Persons: make([]view.PendingPerson, 0, len(rows))}
 	for i := range rows {
 		personItem := personByID[rows[i].PersonID]
 		ref := personItem.Ref()
+		records := recordsByPerson[rows[i].PersonID]
+		if records == nil {
+			records = []record.Resp{}
+		}
 		list.Persons = append(list.Persons, view.PendingPerson{
 			Person:    ref,
 			Count:     rows[i].Count,
 			TotalCent: rows[i].TotalCent,
 			Earliest:  rows[i].Earliest,
+			Records:   records,
 		})
 		list.TotalCount += rows[i].Count
 		list.TotalCent += rows[i].TotalCent
 	}
 	list.PersonCount = int64(len(list.Persons))
+	list.Truncated = total > pendingRecordLimit
 	return &list, nil
 }
+
+// pendingRecordLimit 是回礼清单明细单次返回的上限，超出时标记 custom.truncated。
+const pendingRecordLimit = 500
 
 func dedupe(ids []uint64) []uint64 {
 	seen := make(map[uint64]struct{}, len(ids))

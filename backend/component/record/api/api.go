@@ -19,21 +19,27 @@ func NewRecordAPI(srv *service.RecordSrv) *RecordAPI {
 
 func (a *RecordAPI) List(c *gin.Context) {
 	q := record.Query{
-		BookID:       uint64(utils.GetInt64FromQuery(c, "bookId")),
-		BookCategory: utils.GetStrFromQuery(c, "bookCategory"),
-		EventType:    utils.GetStrFromQuery(c, "eventType"),
-		OriginBookID: uint64(utils.GetInt64FromQuery(c, "originBookId")),
-		PersonID:  uint64(utils.GetInt64FromQuery(c, "personId")),
-		EventID:   uint64(utils.GetInt64FromQuery(c, "eventId")),
-		ItemKind:  utils.GetStrFromQuery(c, "itemKind"),
-		Direction: utils.GetStrFromQuery(c, "direction"),
-		Status:    utils.GetStrFromQuery(c, "status"),
-		From:      utils.GetStrFromQuery(c, "from"),
-		To:        utils.GetStrFromQuery(c, "to"),
-		Keyword:   utils.GetStrFromQuery(c, "keyword"),
+		BookID:        uint64(utils.GetInt64FromQuery(c, "bookId")),
+		BookCategory:  utils.GetStrFromQuery(c, "bookCategory"),
+		EventType:     utils.GetStrFromQuery(c, "eventType"),
+		OriginBookID:  uint64(utils.GetInt64FromQuery(c, "originBookId")),
+		PersonID:      uint64(utils.GetInt64FromQuery(c, "personId")),
+		EventID:       uint64(utils.GetInt64FromQuery(c, "eventId")),
+		ItemKind:      utils.GetStrFromQuery(c, "itemKind"),
+		Direction:     utils.GetStrFromQuery(c, "direction"),
+		Status:        utils.GetStrFromQuery(c, "status"),
+		From:          utils.GetStrFromQuery(c, "from"),
+		To:            utils.GetStrFromQuery(c, "to"),
+		Keyword:       utils.GetStrFromQuery(c, "keyword"),
+		PersonKeyword: utils.GetStrFromQuery(c, "personKeyword"),
 	}
 	f := utils.GetFilter(c)
 	items, total, err := a.srv.List(c.Request.Context(), q, f)
+	if err != nil {
+		response.JsonErr(c, err)
+		return
+	}
+	summary, err := a.srv.Summary(c.Request.Context(), q)
 	if err != nil {
 		response.JsonErr(c, err)
 		return
@@ -43,6 +49,7 @@ func (a *RecordAPI) List(c *gin.Context) {
 		response.WithTotal(total),
 		response.WithPerPage(f.Limit),
 		response.WithIndex(f.Offset),
+		response.WithCustomField("summary", summary),
 	)
 }
 

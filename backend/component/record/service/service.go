@@ -19,10 +19,10 @@ import (
 	"harmony/infra/consts"
 	"harmony/infra/logger"
 	"harmony/infra/middleware"
-	modelfilter "harmony/infra/model/filter"
 	"harmony/infra/model/book"
 	"harmony/infra/model/dict"
 	"harmony/infra/model/event"
+	modelfilter "harmony/infra/model/filter"
 	"harmony/infra/model/person"
 	"harmony/infra/model/record"
 	"harmony/infra/rdb"
@@ -85,23 +85,9 @@ func NewRecordSrv(
 }
 
 func (s *RecordSrv) List(ctx context.Context, q record.Query, f *modelfilter.Filter) ([]record.Resp, int64, error) {
-	ownerID := middleware.OwnerID(ctx)
-	if q.Keyword != "" {
-		q.Intent = record.ParseIntent(q.Keyword)
-	}
-	if q.Direction != "" && !consts.ValidDirection(q.Direction) {
-		return nil, 0, response.BadRequest("方向取值不正确", "invalid direction")
-	}
-	if q.Status != "" && !consts.ValidRecordStatus(q.Status) {
-		return nil, 0, response.BadRequest("状态取值不正确", "invalid status")
-	}
-	if q.BookCategory != "" {
-		if _, err := s.dicts.GetByCode(s.rdb.Get(), ownerID, consts.DictTypeBookCategory, q.BookCategory); err != nil {
-			return nil, 0, response.BadRequest("礼簿类别不存在", "invalid book category")
-		}
-	}
-	if q.EventType != "" && !consts.ValidEventType(q.EventType) {
-		return nil, 0, response.BadRequest("事项类型不正确", "invalid event type")
+	ownerID, q, err := s.prepareQuery(ctx, q)
+	if err != nil {
+		return nil, 0, err
 	}
 	items, total, err := s.store.List(s.rdb.Get(), ownerID, q, f)
 	if err != nil {
@@ -112,6 +98,38 @@ func (s *RecordSrv) List(ctx context.Context, q record.Query, f *modelfilter.Fil
 		return nil, 0, err
 	}
 	return out, total, nil
+}
+
+// Summary 返回与 List 相同筛选条件下的条数与收、送、未回礼金额。
+func (s *RecordSrv) Summary(ctx context.Context, q record.Query) (record.Summary, error) {
+	ownerID, q, err := s.prepareQuery(ctx, q)
+	if err != nil {
+		return record.Summary{}, err
+	}
+	return s.store.Summary(s.rdb.Get(), ownerID, q)
+}
+
+// prepareQuery 校验并归一化查询参数，List 与 Summary 共用同一套规则。
+func (s *RecordSrv) prepareQuery(ctx context.Context, q record.Query) (uint64, record.Query, error) {
+	ownerID := middleware.OwnerID(ctx)
+	if q.Keyword != "" {
+		q.Intent = record.ParseIntent(q.Keyword)
+	}
+	if q.Direction != "" && !consts.ValidDirection(q.Direction) {
+		return 0, q, response.BadRequest("方向取值不正确", "invalid direction")
+	}
+	if q.Status != "" && !consts.ValidRecordStatus(q.Status) {
+		return 0, q, response.BadRequest("状态取值不正确", "invalid status")
+	}
+	if q.BookCategory != "" {
+		if _, err := s.dicts.GetByCode(s.rdb.Get(), ownerID, consts.DictTypeBookCategory, q.BookCategory); err != nil {
+			return 0, q, response.BadRequest("礼簿类别不存在", "invalid book category")
+		}
+	}
+	if q.EventType != "" && !consts.ValidEventType(q.EventType) {
+		return 0, q, response.BadRequest("事项类型不正确", "invalid event type")
+	}
+	return ownerID, q, nil
 }
 
 func (s *RecordSrv) Detail(ctx context.Context, id uint64) (*record.Detail, error) {
@@ -922,38 +940,38 @@ func (s *RecordSrv) serialize(db *gorm.DB, ownerID uint64, items []record.Record
 			originName = originBook.Name
 		}
 		out = append(out, record.Resp{
-			ID:             item.ID,
-			PersonID:       item.PersonID,
-			PersonName:     personItem.Name,
-			PersonRelation: personItem.Relation,
-			EventID:        item.EventID,
-			EventName:      eventItem.Name,
-			EventType:      eventItem.Type,
-			BookID:         item.BookID,
-			BookName:       bookItem.Name,
-			OriginBookID:   item.OriginBookID,
-			OriginBookName: originName,
-			ItemKind:       item.ItemKind,
-			ItemKindLabel:  labelOf(labels, item.ItemKind),
-			Direction:      item.Direction,
-			AmountCent:     item.AmountCent,
-			GiftName:       item.GiftName,
-			GiftValueCent:  item.GiftValueCent,
-			TotalCent:      item.TotalCent,
-			OccurredOn:     item.OccurredOn.String(),
-			DatePrecision:  item.DatePrecision,
-			Status:         item.Status,
-			StatusLabel:    record.StatusLabel(item.Status, item.Direction, isRepay),
-			IsRepay:        isRepay,
-			Remark:         item.Remark,
-			PaperNote:      item.PaperNote,
-			PaperPage:      item.PaperPage,
-			PaperSeq:       item.PaperSeq,
-			Source:         item.Source,
+			ID:              item.ID,
+			PersonID:        item.PersonID,
+			PersonName:      personItem.Name,
+			PersonRelation:  personItem.Relation,
+			EventID:         item.EventID,
+			EventName:       eventItem.Name,
+			EventType:       eventItem.Type,
+			BookID:          item.BookID,
+			BookName:        bookItem.Name,
+			OriginBookID:    item.OriginBookID,
+			OriginBookName:  originName,
+			ItemKind:        item.ItemKind,
+			ItemKindLabel:   labelOf(labels, item.ItemKind),
+			Direction:       item.Direction,
+			AmountCent:      item.AmountCent,
+			GiftName:        item.GiftName,
+			GiftValueCent:   item.GiftValueCent,
+			TotalCent:       item.TotalCent,
+			OccurredOn:      item.OccurredOn.String(),
+			DatePrecision:   item.DatePrecision,
+			Status:          item.Status,
+			StatusLabel:     record.StatusLabel(item.Status, item.Direction, isRepay),
+			IsRepay:         isRepay,
+			Remark:          item.Remark,
+			PaperNote:       item.PaperNote,
+			PaperPage:       item.PaperPage,
+			PaperSeq:        item.PaperSeq,
+			Source:          item.Source,
 			RecognizeTaskID: recognizeTaskID(item.RecognizeTaskID),
-			RepayCount:     repayCount,
-			CreatedAt:      utils.Millis(item.CreatedAt),
-			UpdatedAt:      utils.Millis(item.UpdatedAt),
+			RepayCount:      repayCount,
+			CreatedAt:       utils.Millis(item.CreatedAt),
+			UpdatedAt:       utils.Millis(item.UpdatedAt),
 		})
 	}
 	return out, nil

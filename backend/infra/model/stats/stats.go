@@ -8,9 +8,9 @@ import (
 )
 
 type MonthStat struct {
-	Month     int    `json:"month"`
-	InCent    int64  `json:"inCent"`
-	OutCent   int64  `json:"outCent"`
+	Month       int   `json:"month"`
+	InCent      int64 `json:"inCent"`
+	OutCent     int64 `json:"outCent"`
 	RecordCount int64 `json:"recordCount"`
 }
 
@@ -35,38 +35,41 @@ type EventTypeStat struct {
 	Type        string `json:"type"`
 	TypeLabel   string `json:"typeLabel"`
 	Cent        int64  `json:"cent"`
+	InCent      int64  `json:"inCent"`
+	OutCent     int64  `json:"outCent"`
 	RecordCount int64  `json:"recordCount"`
 	EventCount  int64  `json:"eventCount"`
 }
 
 type PersonStat struct {
-	Person    person.Ref `json:"person"`
-	InCent    int64      `json:"inCent"`
-	OutCent   int64      `json:"outCent"`
-	NetCent   int64      `json:"netCent"`
-	RecordCount int64    `json:"recordCount"`
+	Person      person.Ref `json:"person"`
+	InCent      int64      `json:"inCent"`
+	OutCent     int64      `json:"outCent"`
+	NetCent     int64      `json:"netCent"`
+	RecordCount int64      `json:"recordCount"`
+	LastDate    string     `json:"lastDate"`
 }
 
 type BookStat struct {
-	Book      book.Resp `json:"book"`
-	InCent    int64     `json:"inCent"`
-	OutCent   int64     `json:"outCent"`
-	RecordCount int64   `json:"recordCount"`
+	Book        book.Resp `json:"book"`
+	InCent      int64     `json:"inCent"`
+	OutCent     int64     `json:"outCent"`
+	RecordCount int64     `json:"recordCount"`
 }
 
 type Year struct {
-	Year         int64          `json:"year"`
-	InCent       int64          `json:"inCent"`
-	OutCent      int64          `json:"outCent"`
-	NetCent      int64          `json:"netCent"`
-	RecordCount  int64          `json:"recordCount"`
-	PersonCount  int64          `json:"personCount"`
-	Monthly      []MonthStat    `json:"monthly"`
+	Year           int64              `json:"year"`
+	InCent         int64              `json:"inCent"`
+	OutCent        int64              `json:"outCent"`
+	NetCent        int64              `json:"netCent"`
+	RecordCount    int64              `json:"recordCount"`
+	PersonCount    int64              `json:"personCount"`
+	Monthly        []MonthStat        `json:"monthly"`
 	ByBookCategory []BookCategoryStat `json:"byBookCategory"`
-	ByItem       []KindStat     `json:"byItem"`
-	ByEventType  []EventTypeStat `json:"byEventType"`
-	TopPersons   []PersonStat   `json:"topPersons"`
-	ByBook       []BookStat     `json:"byBook"`
+	ByItem         []KindStat         `json:"byItem"`
+	ByEventType    []EventTypeStat    `json:"byEventType"`
+	TopPersons     []PersonStat       `json:"topPersons"`
+	ByBook         []BookStat         `json:"byBook"`
 }
 
 type EventStats struct {
@@ -75,10 +78,10 @@ type EventStats struct {
 }
 
 type BookStats struct {
-	Book        book.Resp `json:"book"`
-	InCent      int64     `json:"inCent"`
-	OutCent     int64     `json:"outCent"`
-	PendingCount int64    `json:"pendingCount"`
-	RecordCount int64     `json:"recordCount"`
-	ByItem      []KindStat `json:"byItem"`
+	Book         book.Resp  `json:"book"`
+	InCent       int64      `json:"inCent"`
+	OutCent      int64      `json:"outCent"`
+	PendingCount int64      `json:"pendingCount"`
+	RecordCount  int64      `json:"recordCount"`
+	ByItem       []KindStat `json:"byItem"`
 }

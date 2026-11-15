@@ -37,6 +37,7 @@ type PersonDetailLine struct {
 	BookName      string   `json:"bookName"`
 	ItemKindLabel string   `json:"itemKindLabel"`
 	Direction     string   `json:"direction"`
+	IsRepay       bool     `json:"isRepay"`
 	Cent          int64    `json:"cent"`
 	RecordIDs     []uint64 `json:"recordIds"`
 }
@@ -46,20 +47,23 @@ type EventPerson struct {
 	InCent       int64              `json:"inCent"`
 	OutCent      int64              `json:"outCent"`
 	PendingCount int64              `json:"pendingCount"`
+	RepayCount   int64              `json:"repayCount"`
+	RepayCent    int64              `json:"repayCent"`
 	Details      []PersonDetailLine `json:"details"`
 }
 
 type EventSummary struct {
-	Event   EventBrief     `json:"event"`
-	Summary event.Summary  `json:"summary"`
-	Persons []EventPerson  `json:"persons"`
+	Event   EventBrief    `json:"event"`
+	Summary event.Summary `json:"summary"`
+	Persons []EventPerson `json:"persons"`
 }
 
 type PendingPerson struct {
-	Person     person.Ref `json:"person"`
-	Count      int64      `json:"count"`
-	TotalCent  int64      `json:"totalCent"`
-	Earliest   string     `json:"earliest"`
+	Person    person.Ref    `json:"person"`
+	Count     int64         `json:"count"`
+	TotalCent int64         `json:"totalCent"`
+	Earliest  string        `json:"earliest"`
+	Records   []record.Resp `json:"records"`
 }
 
 type PendingList struct {
@@ -67,4 +71,6 @@ type PendingList struct {
 	PersonCount int64           `json:"personCount"`
 	TotalCount  int64           `json:"totalCount"`
 	TotalCent   int64           `json:"totalCent"`
+	// Truncated 表示明细超过单次上限被截断，接口以 custom.truncated 返回。
+	Truncated bool `json:"-"`
 }

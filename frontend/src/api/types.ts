@@ -17,6 +17,15 @@ export interface ApiResponse<T> {
 export interface Page<T> {
   items: T[]
   total: number
+  custom?: Record<string, unknown> | null
+}
+
+/** 记录列表筛选结果汇总，金额单位为分。 */
+export interface RecordSummary {
+  count: number
+  inCent: number
+  outCent: number
+  pendingCent: number
 }
 
 export interface ConfirmConflict {
@@ -234,6 +243,7 @@ export interface EventPersonLine {
   direction: string
   cent: number
   recordIds: number[]
+  isRepay: boolean
 }
 
 export interface EventPerson {
@@ -241,6 +251,8 @@ export interface EventPerson {
   inCent: number
   outCent: number
   pendingCount: number
+  repayCount: number
+  repayCent: number
   details: EventPersonLine[]
 }
 
@@ -262,6 +274,7 @@ export interface PendingPerson {
   count: number
   totalCent: number
   earliest: string
+  records: RecordItem[]
 }
 
 export interface PendingList {
@@ -290,6 +303,8 @@ export interface EventTypeStat {
   type: string
   typeLabel: string
   cent: number
+  inCent: number
+  outCent: number
   recordCount: number
   eventCount: number
 }
@@ -300,6 +315,7 @@ export interface PersonStat {
   outCent: number
   netCent: number
   recordCount: number
+  lastDate: string
 }
 
 export interface BookStat {

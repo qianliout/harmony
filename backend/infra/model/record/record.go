@@ -10,29 +10,29 @@ import (
 )
 
 type Record struct {
-	ID               uint64    `gorm:"primaryKey" json:"id"`
-	OwnerID          uint64    `gorm:"column:owner_id" json:"ownerId"`
-	PersonID         uint64    `gorm:"column:person_id" json:"personId"`
-	EventID          uint64    `gorm:"column:event_id" json:"eventId"`
-	BookID           uint64    `gorm:"column:book_id" json:"bookId"`
-	OriginBookID     uint64    `gorm:"column:origin_book_id" json:"originBookId"`
-	ItemKind         string    `gorm:"column:item_kind" json:"itemKind"`
-	Direction        string    `gorm:"column:direction" json:"direction"`
-	AmountCent       int64     `gorm:"column:amount_cent" json:"amountCent"`
-	GiftName         string    `gorm:"column:gift_name" json:"giftName"`
-	GiftValueCent    int64     `gorm:"column:gift_value_cent" json:"giftValueCent"`
-	TotalCent        int64     `gorm:"column:total_cent;->" json:"totalCent"`
-	OccurredOn       utils.Date `gorm:"column:occurred_on" json:"-"`
-	DatePrecision    string    `gorm:"column:date_precision" json:"datePrecision"`
-	Status           string    `gorm:"column:status" json:"status"`
-	Remark           string    `gorm:"column:remark" json:"remark"`
-	PaperNote        string    `gorm:"column:paper_note" json:"paperNote"`
-	PaperPage        string    `gorm:"column:paper_page" json:"paperPage"`
-	PaperSeq         int       `gorm:"column:paper_seq" json:"paperSeq"`
-	Source           string    `gorm:"column:source" json:"source"`
-	RecognizeTaskID  *uint64   `gorm:"column:recognize_task_id" json:"recognizeTaskId"`
-	CreatedAt        time.Time `gorm:"column:created_at" json:"-"`
-	UpdatedAt        time.Time `gorm:"column:updated_at" json:"-"`
+	ID              uint64     `gorm:"primaryKey" json:"id"`
+	OwnerID         uint64     `gorm:"column:owner_id" json:"ownerId"`
+	PersonID        uint64     `gorm:"column:person_id" json:"personId"`
+	EventID         uint64     `gorm:"column:event_id" json:"eventId"`
+	BookID          uint64     `gorm:"column:book_id" json:"bookId"`
+	OriginBookID    uint64     `gorm:"column:origin_book_id" json:"originBookId"`
+	ItemKind        string     `gorm:"column:item_kind" json:"itemKind"`
+	Direction       string     `gorm:"column:direction" json:"direction"`
+	AmountCent      int64      `gorm:"column:amount_cent" json:"amountCent"`
+	GiftName        string     `gorm:"column:gift_name" json:"giftName"`
+	GiftValueCent   int64      `gorm:"column:gift_value_cent" json:"giftValueCent"`
+	TotalCent       int64      `gorm:"column:total_cent;->" json:"totalCent"`
+	OccurredOn      utils.Date `gorm:"column:occurred_on" json:"-"`
+	DatePrecision   string     `gorm:"column:date_precision" json:"datePrecision"`
+	Status          string     `gorm:"column:status" json:"status"`
+	Remark          string     `gorm:"column:remark" json:"remark"`
+	PaperNote       string     `gorm:"column:paper_note" json:"paperNote"`
+	PaperPage       string     `gorm:"column:paper_page" json:"paperPage"`
+	PaperSeq        int        `gorm:"column:paper_seq" json:"paperSeq"`
+	Source          string     `gorm:"column:source" json:"source"`
+	RecognizeTaskID *uint64    `gorm:"column:recognize_task_id" json:"recognizeTaskId"`
+	CreatedAt       time.Time  `gorm:"column:created_at" json:"-"`
+	UpdatedAt       time.Time  `gorm:"column:updated_at" json:"-"`
 }
 
 func (*Record) TableName() string { return "record" }
@@ -61,39 +61,39 @@ func (*PaperPageCheck) TableName() string { return "paper_page_check" }
 
 // Resp 是记录的读出口；关联名称由 service 批量补齐。
 type Resp struct {
-	ID             uint64  `json:"id"`
-	PersonID       uint64  `json:"personId"`
-	PersonName     string  `json:"personName"`
-	PersonRelation string  `json:"personRelation"`
-	EventID        uint64  `json:"eventId"`
-	EventName      string  `json:"eventName"`
-	EventType      string  `json:"eventType"`
-	BookID         uint64  `json:"bookId"`
-	BookName       string  `json:"bookName"`
-	OriginBookID   uint64  `json:"originBookId"`
-	OriginBookName string  `json:"originBookName"`
-	ItemKind       string  `json:"itemKind"`
-	ItemKindLabel  string  `json:"itemKindLabel"`
-	Direction      string  `json:"direction"`
-	AmountCent     int64   `json:"amountCent"`
-	GiftName       string  `json:"giftName"`
-	GiftValueCent  int64   `json:"giftValueCent"`
-	TotalCent      int64   `json:"totalCent"`
-	OccurredOn     string  `json:"occurredOn"`
-	DatePrecision  string  `json:"datePrecision"`
-	Status         string  `json:"status"`
-	StatusLabel    string  `json:"statusLabel"`
-	IsRepay        bool    `json:"isRepay"`
-	Remark         string  `json:"remark"`
-	PaperNote      string  `json:"paperNote"`
-	PaperPage      string  `json:"paperPage"`
-	PaperSeq       int     `json:"paperSeq"`
-	Source         string  `json:"source"`
-	RecognizeTaskID uint64 `json:"recognizeTaskId"`
-	RepayCount     int64   `json:"repayCount"`
-	CreatedAt      int64   `json:"createdAt"`
-	UpdatedAt      int64   `json:"updatedAt"`
-	Confidence     float64 `json:"confidence,omitempty"`
+	ID              uint64  `json:"id"`
+	PersonID        uint64  `json:"personId"`
+	PersonName      string  `json:"personName"`
+	PersonRelation  string  `json:"personRelation"`
+	EventID         uint64  `json:"eventId"`
+	EventName       string  `json:"eventName"`
+	EventType       string  `json:"eventType"`
+	BookID          uint64  `json:"bookId"`
+	BookName        string  `json:"bookName"`
+	OriginBookID    uint64  `json:"originBookId"`
+	OriginBookName  string  `json:"originBookName"`
+	ItemKind        string  `json:"itemKind"`
+	ItemKindLabel   string  `json:"itemKindLabel"`
+	Direction       string  `json:"direction"`
+	AmountCent      int64   `json:"amountCent"`
+	GiftName        string  `json:"giftName"`
+	GiftValueCent   int64   `json:"giftValueCent"`
+	TotalCent       int64   `json:"totalCent"`
+	OccurredOn      string  `json:"occurredOn"`
+	DatePrecision   string  `json:"datePrecision"`
+	Status          string  `json:"status"`
+	StatusLabel     string  `json:"statusLabel"`
+	IsRepay         bool    `json:"isRepay"`
+	Remark          string  `json:"remark"`
+	PaperNote       string  `json:"paperNote"`
+	PaperPage       string  `json:"paperPage"`
+	PaperSeq        int     `json:"paperSeq"`
+	Source          string  `json:"source"`
+	RecognizeTaskID uint64  `json:"recognizeTaskId"`
+	RepayCount      int64   `json:"repayCount"`
+	CreatedAt       int64   `json:"createdAt"`
+	UpdatedAt       int64   `json:"updatedAt"`
+	Confidence      float64 `json:"confidence,omitempty"`
 }
 
 type Detail struct {
@@ -104,13 +104,13 @@ type Detail struct {
 
 // Intent 是搜索意图解析结果，所有列表接口共用。
 type Intent struct {
-	Kind         string `json:"kind"`
-	Text         string `json:"text"`
-	AmountCent   int64  `json:"amountCent"`
-	AmountMinCent int64 `json:"amountMinCent"`
-	AmountMaxCent int64 `json:"amountMaxCent"`
-	Year         int64  `json:"year"`
-	PaperPage    string `json:"paperPage"`
+	Kind          string `json:"kind"`
+	Text          string `json:"text"`
+	AmountCent    int64  `json:"amountCent"`
+	AmountMinCent int64  `json:"amountMinCent"`
+	AmountMaxCent int64  `json:"amountMaxCent"`
+	Year          int64  `json:"year"`
+	PaperPage     string `json:"paperPage"`
 }
 
 type Query struct {
@@ -118,37 +118,47 @@ type Query struct {
 	OriginBookID uint64 `json:"originBookId"`
 	BookCategory string `json:"bookCategory"`
 	EventType    string `json:"eventType"`
-	PersonID  uint64 `json:"personId"`
-	EventID   uint64 `json:"eventId"`
-	ItemKind  string `json:"itemKind"`
-	Direction string `json:"direction"`
-	Status    string `json:"status"`
-	From      string `json:"from"`
-	To        string `json:"to"`
-	Keyword   string `json:"keyword"`
-	Intent    Intent `json:"-"`
+	PersonID     uint64 `json:"personId"`
+	EventID      uint64 `json:"eventId"`
+	ItemKind     string `json:"itemKind"`
+	Direction    string `json:"direction"`
+	Status       string `json:"status"`
+	From         string `json:"from"`
+	To           string `json:"to"`
+	Keyword      string `json:"keyword"`
+	// PersonKeyword 按亲友姓名、全拼、首字母做文本筛选，与 PersonID 互斥使用。
+	PersonKeyword string `json:"personKeyword"`
+	Intent        Intent `json:"-"`
+}
+
+// Summary 是筛选结果的汇总口径，金额单位为分。
+type Summary struct {
+	Count       int64 `json:"count"`
+	InCent      int64 `json:"inCent"`
+	OutCent     int64 `json:"outCent"`
+	PendingCent int64 `json:"pendingCent"`
 }
 
 type CreateParam struct {
-	PersonID        uint64 `json:"personId"`
-	PersonName      string `json:"personName"`
-	EventID         uint64 `json:"eventId"`
-	BookID          uint64 `json:"bookId"`
-	ItemKind        string `json:"itemKind"`
-	Direction       string `json:"direction"`
-	AmountCent      int64  `json:"amountCent"`
-	GiftName        string `json:"giftName"`
-	GiftValueCent   int64  `json:"giftValueCent"`
-	OccurredOn      string `json:"occurredOn"`
-	DatePrecision   string `json:"datePrecision"`
-	Status          string `json:"status"`
-	Remark          string `json:"remark"`
-	PaperNote       string `json:"paperNote"`
-	PaperPage       string `json:"paperPage"`
-	PaperSeq        int    `json:"paperSeq"`
-	Source          string `json:"source"`
+	PersonID        uint64  `json:"personId"`
+	PersonName      string  `json:"personName"`
+	EventID         uint64  `json:"eventId"`
+	BookID          uint64  `json:"bookId"`
+	ItemKind        string  `json:"itemKind"`
+	Direction       string  `json:"direction"`
+	AmountCent      int64   `json:"amountCent"`
+	GiftName        string  `json:"giftName"`
+	GiftValueCent   int64   `json:"giftValueCent"`
+	OccurredOn      string  `json:"occurredOn"`
+	DatePrecision   string  `json:"datePrecision"`
+	Status          string  `json:"status"`
+	Remark          string  `json:"remark"`
+	PaperNote       string  `json:"paperNote"`
+	PaperPage       string  `json:"paperPage"`
+	PaperSeq        int     `json:"paperSeq"`
+	Source          string  `json:"source"`
 	RecognizeTaskID *uint64 `json:"-"`
-	Confirm         bool   `json:"confirm"`
+	Confirm         bool    `json:"confirm"`
 }
 
 type UpdateParam struct {
@@ -171,11 +181,11 @@ type UpdateParam struct {
 }
 
 type RepayItem struct {
-	BookID       uint64 `json:"bookId"`
-	ItemKind     string `json:"itemKind"`
-	AmountCent   int64  `json:"amountCent"`
-	GiftName     string `json:"giftName"`
-	GiftValueCent int64 `json:"giftValueCent"`
+	BookID        uint64 `json:"bookId"`
+	ItemKind      string `json:"itemKind"`
+	AmountCent    int64  `json:"amountCent"`
+	GiftName      string `json:"giftName"`
+	GiftValueCent int64  `json:"giftValueCent"`
 }
 
 type EventParam struct {

@@ -30,11 +30,12 @@ func (a *SearchAPI) Search(c *gin.Context) {
 
 func (a *SearchAPI) Records(c *gin.Context) {
 	q := record.Query{
-		Keyword:      utils.GetStrFromQuery(c, "q"),
-		BookCategory: utils.GetStrFromQuery(c, "bookCategory"),
-		EventType:    utils.GetStrFromQuery(c, "eventType"),
-		From:         utils.GetStrFromQuery(c, "from"),
-		To:           utils.GetStrFromQuery(c, "to"),
+		Keyword:       utils.GetStrFromQuery(c, "q"),
+		BookCategory:  utils.GetStrFromQuery(c, "bookCategory"),
+		EventType:     utils.GetStrFromQuery(c, "eventType"),
+		From:          utils.GetStrFromQuery(c, "from"),
+		To:            utils.GetStrFromQuery(c, "to"),
+		PersonKeyword: utils.GetStrFromQuery(c, "personKeyword"),
 	}
 	page := utils.GetInt64FromQuery(c, "page")
 	pageSize := utils.GetInt64FromQuery(c, "pageSize")

@@ -51,6 +51,8 @@ type AuthConfig struct {
 	MPTokenDays  int64    `yaml:"mpTokenDays"`
 	WebTokenDays int64    `yaml:"webTokenDays"`
 	Secret       string   `yaml:"secret"`
+	// DevUserID 大于 0 时免登录：未带令牌的请求按该用户处理，只允许 debug 模式开启。
+	DevUserID uint64 `yaml:"devUserId"`
 }
 
 type WechatConfig struct {
@@ -148,6 +150,9 @@ func (cfg *Config) Validate() error {
 	}
 	if cfg.Auth.MPTokenDays <= 0 || cfg.Auth.WebTokenDays <= 0 {
 		return fmt.Errorf("auth token days must be positive")
+	}
+	if cfg.Auth.DevUserID > 0 && cfg.Server.Mode != consts.ServerModeDebug {
+		return fmt.Errorf("auth devUserId is only allowed in debug mode")
 	}
 	if len(cfg.Auth.AdminUserIDs) == 0 {
 		cfg.Auth.AdminUserIDs = []uint64{1}

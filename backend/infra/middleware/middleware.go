@@ -63,19 +63,24 @@ func AccessLog() gin.HandlerFunc {
 }
 
 // Auth 读取 Bearer 令牌，查库确认有效后把 owner 写入 ctx。
-func Auth(verifier TokenVerifier) gin.HandlerFunc {
+// devUserID 大于 0 时（仅本机开发）未带令牌的请求直接按该用户处理，带了令牌仍走校验。
+func Auth(verifier TokenVerifier, devUserID uint64) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token := bearerToken(c.GetHeader("Authorization"))
-		if token == "" {
+		if token == "" && devUserID == 0 {
 			response.JsonErr(c, response.Unauthorized("请先登录"))
 			c.Abort()
 			return
 		}
-		ownerID, err := verifier.VerifyToken(c.Request.Context(), token)
-		if err != nil {
-			response.JsonErr(c, err)
-			c.Abort()
-			return
+		ownerID := devUserID
+		if token != "" {
+			verified, err := verifier.VerifyToken(c.Request.Context(), token)
+			if err != nil {
+				response.JsonErr(c, err)
+				c.Abort()
+				return
+			}
+			ownerID = verified
 		}
 		c.Set(ownerContextKeyName, ownerID)
 		ctx := context.WithValue(c.Request.Context(), ownerContextKey{}, ownerID)

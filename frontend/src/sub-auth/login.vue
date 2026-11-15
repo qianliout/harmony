@@ -2,7 +2,7 @@
 import { onLoad, onUnload } from '@dcloudio/uni-app'
 import { computed, ref } from 'vue'
 
-import { clearToken, getToken, setToken } from '@/api/http'
+import { clearToken, setToken } from '@/api/http'
 import { createWebTicket, pollWebTicket, type WebTicket } from '@/api/auth'
 import { useAuthStore } from '@/stores/auth'
 import { toast } from '@/utils/nav'
@@ -132,16 +132,15 @@ onLoad(async (query) => {
       redirect = value
     }
   }
-  if (getToken()) {
-    try {
-      await auth.loadMe()
-      if (auth.isLoggedIn) {
-        uni.reLaunch({ url: redirect })
-        return
-      }
-    } catch {
-      clearToken()
+  // 已登录或本机开发免登录时直接回跳；未登录的 401 在登录页不会再跳转。
+  try {
+    await auth.loadMe()
+    if (auth.isLoggedIn) {
+      uni.reLaunch({ url: redirect })
+      return
     }
+  } catch {
+    clearToken()
   }
   await refresh()
 })

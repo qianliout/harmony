@@ -1,0 +1,1373 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>人情账本 Web 原型</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* 电脑宽屏版：左侧导航 + 顶栏 + 内容区；颜色、圆角、阴影沿用"朱砂礼簿" token（docs/03），只补桌面布局用的尺寸。 */
+:root {
+  color-scheme: light;
+  --c-primary: #C8372D; --c-primary-dark: #A92B22; --c-primary-light: #FBEDEA;
+  --c-in: #C8372D; --c-in-light: #FBEDEA;
+  --c-out: #2E6E72; --c-out-light: #E5EFEF;
+  --c-pending: #C27C0E; --c-pending-light: #FBF0DB;
+  --c-repaid: #4F8A56; --c-repaid-light: #E8F1E7;
+  --c-none: #8C8279; --c-none-light: #F0ECE7;
+  --c-danger: #B42318; --c-danger-light: #FDECEA;
+  --c-ink-1: #221C18; --c-ink-2: #5A504A; --c-ink-3: #968B83; --c-ink-4: #C7BEB6;
+  --c-bg: #F6F2EC; --c-surface: #FFFFFF; --c-fill: #F2ECE4;
+  --c-line: #EAE3DA; --c-divider: #F1ECE5; --c-mask: rgba(34, 28, 24, .45);
+  --c-side: #FBF8F4; --c-hover: #FCFAF7; --c-on-primary: #FFFFFF; --c-on-primary-2: rgba(255, 255, 255, .8);
+  --c-paper: #F3E9D6; --c-paper-ink: #2B2420; --c-paper-line: #D9C7A6;
+
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px;
+  --sp-5: 20px; --sp-6: 24px; --sp-7: 32px; --sp-8: 40px;
+  --r-xs: 6px; --r-s: 10px; --r-m: 14px; --r-l: 20px; --r-full: 999px;
+  --shadow-card: 0 1px 2px rgba(74, 50, 30, .04), 0 2px 12px rgba(74, 50, 30, .05);
+  --shadow-float: 0 8px 24px rgba(74, 50, 30, .14);
+
+  --sans: -apple-system, "PingFang SC", "HarmonyOS Sans SC", "MiSans", "Microsoft YaHei", sans-serif;
+  --serif: "Songti SC", "STSong", "Noto Serif SC", "Source Han Serif SC", serif;
+  --num: "DIN Alternate", "SF Pro Display", "Roboto", -apple-system, "PingFang SC", sans-serif;
+
+  --side-w: 224px; --top-h: 64px; --gutter-x: 32px;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--c-bg); color: var(--c-ink-1); font: 14px/22px var(--sans); -webkit-font-smoothing: antialiased; }
+::selection { background: var(--c-primary-light); color: var(--c-primary-dark); }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--c-primary); outline-offset: 2px; border-radius: var(--r-xs); }
+a { color: inherit; text-decoration: none; }
+.num { font-family: var(--num); font-variant-numeric: tabular-nums; }
+svg.i { width: 18px; height: 18px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--c-line); border-radius: 10px; border: 2px solid var(--c-bg); }
+
+/* 骨架 */
+.app { display: grid; grid-template-columns: var(--side-w) minmax(0, 1fr); min-height: 100vh; }
+.app.bare { display: block; }
+.app.bare .side, .app.bare .top { display: none; }
+.app.bare main { padding: 0; }
+.app.bare .wrap { max-width: none; }
+.side { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: var(--sp-5); padding: var(--sp-5) var(--sp-3); background: var(--c-side); border-right: 1px solid var(--c-line); }
+.brand { display: flex; align-items: center; gap: var(--sp-3); padding: 0 var(--sp-2); }
+.brand .stamp { width: 36px; height: 36px; border-radius: 8px; background: var(--c-primary); color: var(--c-on-primary); display: grid; place-items: center; font: 600 20px/1 var(--serif); }
+.brand b { font-size: 16px; font-weight: 600; display: block; line-height: 22px; }
+.brand small { color: var(--c-ink-3); font-size: 12px; line-height: 16px; }
+.nav { display: flex; flex-direction: column; gap: 2px; }
+.nav h6 { margin: var(--sp-4) 0 var(--sp-1); padding: 0 var(--sp-3); font-size: 12px; font-weight: 500; color: var(--c-ink-3); }
+.nav a { display: flex; align-items: center; gap: var(--sp-3); height: 38px; padding: 0 var(--sp-3); border-radius: var(--r-s); color: var(--c-ink-2); }
+.nav a:hover { background: var(--c-fill); color: var(--c-ink-1); }
+.nav a.on { background: var(--c-primary-light); color: var(--c-primary); font-weight: 500; }
+.nav a .badge { margin-left: auto; font-size: 12px; color: var(--c-pending); font-family: var(--num); }
+.side .me { margin-top: auto; display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-3); border-radius: var(--r-s); }
+.avatar { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; font-weight: 600; font-size: 13px; flex: none; }
+.me small { display: block; color: var(--c-ink-3); font-size: 12px; line-height: 16px; }
+
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; height: var(--top-h); display: flex; align-items: center; gap: var(--sp-4); padding-left: max(var(--gutter-x), env(safe-area-inset-left, 0px)); padding-right: max(var(--gutter-x), env(safe-area-inset-right, 0px)); background: var(--c-bg); border-bottom: 1px solid var(--c-divider); }
+.crumbs { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; font-size: 13px; color: var(--c-ink-3); }
+.crumbs a:hover { color: var(--c-ink-1); }
+.crumbs b { color: var(--c-ink-1); font-size: 16px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.top .search { margin-left: auto; width: 320px; max-width: 40vw; display: flex; align-items: center; gap: var(--sp-2); height: 38px; padding: 0 var(--sp-3); border-radius: var(--r-s); background: var(--c-surface); border: 1px solid var(--c-line); color: var(--c-ink-3); text-align: left; }
+.top .search:hover { border-color: var(--c-ink-4); }
+.top .search span { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+kbd { font: 500 11px/18px var(--sans); padding: 0 6px; border-radius: 4px; background: var(--c-fill); color: var(--c-ink-2); border: 1px solid var(--c-line); }
+main { padding-block: var(--sp-6) 80px; padding-left: max(var(--gutter-x), env(safe-area-inset-left, 0px)); padding-right: max(var(--gutter-x), env(safe-area-inset-right, 0px)); min-width: 0; }
+.wrap { max-width: 1280px; margin: 0 auto; display: flex; flex-direction: column; gap: var(--sp-7); }
+
+/* 通用组件 */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; padding: 0 14px; border-radius: var(--r-s); border: 1px solid var(--c-line); background: var(--c-surface); color: var(--c-ink-1); font-weight: 500; white-space: nowrap; transition: border-color .15s, background .15s; }
+.btn:hover { border-color: var(--c-ink-4); }
+.btn.primary { background: var(--c-primary); border-color: var(--c-primary); color: var(--c-on-primary); }
+.btn.primary:hover { background: var(--c-primary-dark); border-color: var(--c-primary-dark); }
+.btn.danger { color: var(--c-danger); }
+.btn.text { border-color: transparent; background: transparent; color: var(--c-ink-2); padding: 0 8px; }
+.btn.text:hover { background: var(--c-fill); color: var(--c-ink-1); }
+.btn.sm { height: 30px; padding: 0 10px; font-size: 13px; }
+.btn[disabled] { opacity: .45; cursor: not-allowed; }
+.btn svg.i { width: 16px; height: 16px; }
+.ipt, select.ipt, textarea.ipt { height: 36px; padding: 0 var(--sp-3); border-radius: var(--r-s); border: 1px solid transparent; background: var(--c-fill); outline: none; min-width: 0; transition: border-color .15s, background .15s; }
+textarea.ipt { height: auto; padding: var(--sp-2) var(--sp-3); resize: vertical; line-height: 22px; }
+.ipt:focus { border-color: var(--c-primary); background: var(--c-surface); }
+.ipt::placeholder { color: var(--c-ink-3); }
+select.ipt { appearance: none; padding-right: 28px; background-image: linear-gradient(45deg, transparent 50%, var(--c-ink-3) 50%), linear-gradient(135deg, var(--c-ink-3) 50%, transparent 50%); background-position: calc(100% - 15px) 16px, calc(100% - 10px) 16px; background-size: 5px 5px; background-repeat: no-repeat; }
+.seg { flex: none; display: inline-flex; padding: 3px; border-radius: var(--r-s); background: var(--c-fill); gap: 2px; }
+.seg button { height: 30px; padding: 0 12px; border: 0; border-radius: 8px; background: transparent; color: var(--c-ink-2); white-space: nowrap; }
+.seg button.on { background: var(--c-surface); color: var(--c-ink-1); font-weight: 500; box-shadow: var(--shadow-card); }
+.seg.dirseg button.on[data-v="收"] { color: var(--c-in); }
+.seg.dirseg button.on[data-v="送"] { color: var(--c-out); }
+
+.card { background: var(--c-surface); border-radius: var(--r-m); box-shadow: var(--shadow-card); }
+.section { display: flex; flex-direction: column; gap: var(--sp-4); min-width: 0; }
+.sec-head { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; }
+.sec-head h2 { margin: 0; font-size: 17px; line-height: 24px; font-weight: 600; }
+.sec-head .sub { color: var(--c-ink-3); font-size: 13px; }
+.sec-head .tools { margin-left: auto; display: flex; gap: var(--sp-2); flex-wrap: wrap; align-items: center; }
+.page-head { display: flex; align-items: flex-end; gap: var(--sp-4); flex-wrap: wrap; }
+.page-head h1 { margin: 0; font-size: 22px; line-height: 30px; font-weight: 600; text-wrap: balance; }
+.page-head .meta { color: var(--c-ink-3); font-size: 13px; margin-top: 2px; }
+.page-head .tools { margin-left: auto; display: flex; gap: var(--sp-2); flex-wrap: wrap; }
+
+.seal { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: var(--r-xs); font: 600 14px/1 var(--serif); flex: none; border: 1px solid color-mix(in srgb, currentColor 30%, transparent); }
+.seal.lg { width: 44px; height: 44px; font-size: 24px; border-radius: 10px; }
+.pill { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: var(--r-full); font-size: 12px; white-space: nowrap; }
+.pill.pending { background: var(--c-pending-light); color: var(--c-pending); }
+.pill.repaid { background: var(--c-repaid-light); color: var(--c-repaid); }
+.pill.none { background: var(--c-none-light); color: var(--c-none); }
+.pill.back { background: var(--c-out-light); color: var(--c-out); }
+.pill.neutral { background: var(--c-fill); color: var(--c-ink-2); }
+.pill.warn { background: var(--c-danger-light); color: var(--c-danger); }
+.dir { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; font-size: 12px; font-weight: 600; }
+.dir.in { background: var(--c-in-light); color: var(--c-in); }
+.dir.out { background: var(--c-out-light); color: var(--c-out); }
+.amt { font-family: var(--num); font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+.amt.in { color: var(--c-in); } .amt.out { color: var(--c-out); } .amt.pend { color: var(--c-pending); }
+.muted { color: var(--c-ink-3); }
+.sm { font-size: 13px; }
+.approx { font-size: 12px; color: var(--c-ink-3); margin-left: 2px; }
+.empty { padding: var(--sp-8) var(--sp-4); text-align: center; color: var(--c-ink-3); }
+
+/* 表格 */
+.tbl-wrap { overflow-x: auto; }
+.tbl { width: 100%; border-collapse: collapse; }
+.tbl th { text-align: left; font-size: 12px; font-weight: 500; color: var(--c-ink-3); padding: 10px 16px; border-bottom: 1px solid var(--c-divider); white-space: nowrap; }
+.tbl td { padding: 11px 16px; border-bottom: 1px solid var(--c-divider); vertical-align: middle; white-space: nowrap; }
+.tbl tr:last-child td { border-bottom: 0; }
+.tbl tbody tr.link { cursor: pointer; }
+.tbl tbody tr.link:hover td { background: var(--c-hover); }
+.tbl tbody tr.sel td { background: var(--c-primary-light); }
+.tbl .r { text-align: right; }
+.tbl td.pend-bar { box-shadow: inset 3px 0 0 var(--c-pending); }
+.tbl tfoot td { font-weight: 600; border-top: 1px solid var(--c-line); border-bottom: 0; }
+.cell-2 { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
+.cell-2 .t { display: flex; flex-direction: column; min-width: 0; line-height: 20px; }
+.cell-2 .t small { color: var(--c-ink-3); font-size: 12px; line-height: 16px; }
+.chk { width: 16px; height: 16px; accent-color: var(--c-primary); }
+
+/* 筛选栏：主维度在前，辅助条件收在后面 */
+.filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); padding: var(--sp-3) var(--sp-4); border-bottom: 1px solid var(--c-divider); }
+.filters .lbl { font-size: 12px; color: var(--c-ink-3); margin-right: 2px; }
+.filters .gap { width: 1px; height: 20px; background: var(--c-line); margin: 0 var(--sp-2); }
+.filters select.ipt, .filters .ipt { height: 32px; font-size: 13px; }
+.filters .right { margin-left: auto; display: flex; gap: var(--sp-2); align-items: center; }
+.sumbar { display: flex; gap: var(--sp-6); flex-wrap: wrap; padding: var(--sp-3) var(--sp-4); border-top: 1px solid var(--c-divider); font-size: 13px; color: var(--c-ink-2); align-items: center; }
+.sumbar .pager { margin-left: auto; display: flex; gap: var(--sp-1); align-items: center; }
+
+/* 统计块：数字在上，标签在下 */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--sp-4); }
+.stat { padding: var(--sp-4) var(--sp-5); }
+.stat .v { font: 600 24px/32px var(--num); font-variant-numeric: tabular-nums; }
+.stat .k { font-size: 13px; color: var(--c-ink-3); margin-top: 2px; }
+.stat .k a { color: var(--c-pending); }
+
+/* 首页朱砂卡：全应用唯一一处大面积强色 */
+.hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-6); padding: var(--sp-6) var(--sp-7); border-radius: var(--r-m); color: var(--c-on-primary); background: linear-gradient(135deg, var(--c-primary), var(--c-primary-dark)); box-shadow: var(--shadow-float); position: relative; overflow: hidden; }
+.hero::after { content: "礼"; position: absolute; right: 230px; bottom: -36px; font: 600 150px/1 var(--serif); color: rgba(255, 255, 255, .06); pointer-events: none; }
+.hero .greet { font: 600 20px/28px var(--serif); }
+.hero .greet small { font: 400 13px/20px var(--sans); color: var(--c-on-primary-2); margin-left: var(--sp-3); }
+.hero .figs { display: flex; gap: var(--sp-8); margin-top: var(--sp-5); flex-wrap: wrap; }
+.hero .figs .k { font-size: 13px; color: var(--c-on-primary-2); }
+.hero .figs .v { font: 600 32px/40px var(--num); font-variant-numeric: tabular-nums; }
+.hero .figs .v.s { font-size: 22px; line-height: 40px; }
+.hero .owe { margin-top: var(--sp-4); display: inline-flex; align-items: center; gap: var(--sp-2); height: 32px; padding: 0 var(--sp-3); border-radius: var(--r-full); background: rgba(255, 255, 255, .14); font-size: 13px; }
+.hero .owe:hover { background: rgba(255, 255, 255, .22); }
+.hero .acts { display: flex; flex-direction: column; gap: var(--sp-2); justify-content: center; position: relative; z-index: 1; }
+.hero .acts .btn { width: 200px; justify-content: flex-start; background: rgba(255, 255, 255, .12); border-color: rgba(255, 255, 255, .22); color: var(--c-on-primary); }
+.hero .acts .btn:hover { background: rgba(255, 255, 255, .2); }
+.hero .acts .btn.main { background: var(--c-surface); color: var(--c-primary); border-color: var(--c-surface); }
+.hero .acts .btn kbd { margin-left: auto; background: rgba(255, 255, 255, .16); color: var(--c-on-primary); border-color: transparent; }
+.hero .acts .btn.main kbd { background: var(--c-primary-light); color: var(--c-primary); }
+
+.grid-2 { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: var(--sp-6); align-items: start; }
+.grid-2e { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-6); align-items: start; }
+.list { display: flex; flex-direction: column; }
+.list .row { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4); border-bottom: 1px solid var(--c-divider); }
+.list .row:last-child { border-bottom: 0; }
+.list a.row:hover { background: var(--c-hover); }
+.list .row .grow { flex: 1; min-width: 0; }
+.list .row .grow small { display: block; color: var(--c-ink-3); font-size: 12px; line-height: 18px; }
+
+/* 详情页头 */
+.profile { display: flex; gap: var(--sp-4); align-items: center; }
+.profile .avatar { width: 52px; height: 52px; font-size: 20px; }
+.back { display: inline-flex; align-items: center; gap: 4px; color: var(--c-ink-3); font-size: 13px; }
+.back:hover { color: var(--c-ink-1); }
+
+/* 人详情时间线：按事项分组 */
+.group { border-bottom: 1px solid var(--c-divider); }
+.group:last-child { border-bottom: 0; }
+.group-head { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-4) var(--sp-4) var(--sp-2); }
+.group-head .t { flex: 1; min-width: 0; }
+.group-head .t b { font-weight: 600; }
+.group-head .t small { display: block; color: var(--c-ink-3); font-size: 12px; line-height: 16px; }
+.group .tbl { table-layout: fixed; min-width: 640px; }
+.group .tbl td { padding-top: 9px; padding-bottom: 9px; overflow: hidden; text-overflow: ellipsis; }
+.group .tbl th:nth-child(1) { width: 52px; } .group .tbl th:nth-child(2) { width: 18%; } .group .tbl th:nth-child(3) { width: 24%; }
+.group .tbl th:nth-child(4) { width: 14%; } .group .tbl th:nth-child(6) { width: 132px; }
+.group .subtotal { display: flex; gap: var(--sp-4); font-size: 13px; color: var(--c-ink-2); }
+
+/* 页内 tab */
+.tabs { display: flex; gap: var(--sp-6); border-bottom: 1px solid var(--c-line); overflow-x: auto; overflow-y: hidden; }
+.tabs button { height: 44px; border: 0; background: none; padding: 0; color: var(--c-ink-2); font-size: 15px; position: relative; white-space: nowrap; }
+.tabs button.on { color: var(--c-ink-1); font-weight: 600; }
+.tabs button.on::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--c-primary); border-radius: 2px; }
+.tabs button .n { font-family: var(--num); color: var(--c-ink-3); margin-left: 4px; font-size: 13px; }
+
+/* 抽屉、对话框、搜索面板 */
+.mask { position: fixed; inset: 0; background: var(--c-mask); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 40; }
+.mask.on { opacity: 1; pointer-events: auto; }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 520px; max-width: 100vw; background: var(--c-surface); box-shadow: var(--shadow-float); z-index: 50; display: flex; flex-direction: column; transform: translateX(104%); transition: transform .26s cubic-bezier(.2, .8, .2, 1); }
+.drawer.on { transform: none; }
+.drawer.notes { width: 380px; background: var(--c-side); }
+.d-head { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-5) var(--sp-6) var(--sp-4); border-bottom: 1px solid var(--c-divider); padding-top: max(var(--sp-5), env(safe-area-inset-top, 0px)); }
+.d-head h3 { margin: 0; font-size: 17px; font-weight: 600; flex: 1; }
+.d-body { flex: 1; overflow-y: auto; padding: var(--sp-5) var(--sp-6); display: flex; flex-direction: column; gap: var(--sp-4); }
+.d-foot { display: flex; gap: var(--sp-2); justify-content: flex-end; padding: var(--sp-4) var(--sp-6); border-top: 1px solid var(--c-divider); padding-bottom: max(var(--sp-4), env(safe-area-inset-bottom, 0px)); }
+.d-foot .left { margin-right: auto; display: flex; gap: var(--sp-2); }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field > label { font-size: 13px; color: var(--c-ink-2); font-weight: 500; }
+.field .hint { font-size: 12px; color: var(--c-ink-3); line-height: 18px; }
+.field-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-3); }
+.amount-in { position: relative; }
+.amount-in .ipt { width: 100%; height: 52px; padding-left: 36px; font: 600 26px/1 var(--num); }
+.amount-in::before { content: "¥"; position: absolute; left: 14px; top: 13px; font: 600 20px/26px var(--num); color: var(--c-ink-3); }
+.upper { font-size: 13px; color: var(--c-ink-2); font-family: var(--serif); min-height: 20px; }
+.alert { display: flex; gap: var(--sp-2); padding: var(--sp-3); border-radius: var(--r-s); font-size: 13px; line-height: 20px; }
+.alert svg.i { width: 16px; height: 16px; margin-top: 2px; }
+.alert.warn { background: var(--c-pending-light); color: var(--c-ink-1); }
+.alert.warn svg { color: var(--c-pending); }
+.alert.err { background: var(--c-danger-light); color: var(--c-danger); }
+.alert.info { background: var(--c-fill); color: var(--c-ink-2); }
+.dl { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 10px var(--sp-4); font-size: 14px; }
+.dl dt { color: var(--c-ink-3); }
+.dl dd { margin: 0; }
+.chain { display: flex; flex-direction: column; gap: var(--sp-2); }
+.chain a { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-3); border-radius: var(--r-s); background: var(--c-fill); }
+.chain a:hover { background: var(--c-line); }
+
+.dialog { position: fixed; left: 50%; top: 50%; width: 460px; max-width: calc(100vw - 32px); transform: translate(-50%, -46%); opacity: 0; pointer-events: none; z-index: 60; transition: transform .2s cubic-bezier(.2, .8, .2, 1), opacity .2s; background: var(--c-surface); border-radius: var(--r-m); box-shadow: var(--shadow-float); }
+.dialog.on { opacity: 1; pointer-events: auto; transform: translate(-50%, -50%); }
+.dialog .d-head { padding: var(--sp-5) var(--sp-6) var(--sp-3); border: 0; }
+.dialog .d-body { padding: 0 var(--sp-6) var(--sp-4); }
+.dialog .d-foot { border: 0; padding-top: 0; }
+
+.palette { position: fixed; left: 50%; top: 12vh; width: 640px; max-width: calc(100vw - 32px); transform: translateX(-50%) translateY(-8px); opacity: 0; pointer-events: none; z-index: 60; transition: transform .18s, opacity .18s; background: var(--c-surface); border-radius: var(--r-m); box-shadow: var(--shadow-float); overflow: hidden; }
+.palette.on { opacity: 1; pointer-events: auto; transform: translateX(-50%); }
+.palette .q { display: flex; align-items: center; gap: var(--sp-3); padding: 0 var(--sp-5); height: 56px; border-bottom: 1px solid var(--c-divider); color: var(--c-ink-3); }
+.palette .q input { flex: 1; border: 0; outline: none; font-size: 16px; background: transparent; color: var(--c-ink-1); }
+.palette .res { max-height: 60vh; overflow-y: auto; padding: var(--sp-2) 0; }
+.palette .res h6 { margin: var(--sp-2) var(--sp-5) var(--sp-1); font-size: 12px; font-weight: 500; color: var(--c-ink-3); }
+.palette .res a { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-2) var(--sp-5); }
+.palette .res a:hover, .palette .res a.on { background: var(--c-fill); }
+.palette .res a .grow { flex: 1; min-width: 0; }
+.palette .res a small { color: var(--c-ink-3); font-size: 12px; }
+.palette .tips { padding: var(--sp-3) var(--sp-5) var(--sp-4); display: flex; flex-wrap: wrap; gap: var(--sp-2); font-size: 13px; color: var(--c-ink-3); align-items: center; }
+.palette .tips button { border: 0; background: var(--c-fill); border-radius: var(--r-full); height: 26px; padding: 0 10px; color: var(--c-ink-2); font-size: 12px; }
+
+.toast { position: fixed; left: 50%; bottom: max(32px, env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 12px); opacity: 0; z-index: 80; padding: 10px 18px; border-radius: var(--r-full); background: var(--c-ink-1); color: var(--c-on-primary); font-size: 14px; transition: transform .2s, opacity .2s; pointer-events: none; display: flex; align-items: center; gap: var(--sp-2); }
+.toast.on { opacity: 1; transform: translate(-50%, 0); }
+
+.notes ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: var(--sp-3); color: var(--c-ink-2); line-height: 22px; }
+.notes ol b { color: var(--c-ink-1); font-weight: 600; }
+.notes .kbds { display: grid; grid-template-columns: auto 1fr; gap: 8px 12px; font-size: 13px; color: var(--c-ink-2); align-items: center; }
+
+/* 柱条：同一刻度 */
+.bars { display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-4); }
+.bar-row { display: grid; grid-template-columns: 72px minmax(0, 1fr) 96px; gap: var(--sp-3); align-items: center; font-size: 13px; }
+.bar-row .track { display: flex; flex-direction: column; gap: 3px; }
+.bar-row .track i { display: block; height: 8px; border-radius: 4px; min-width: 2px; }
+.bar-row .track i.in { background: var(--c-in); }
+.bar-row .track i.out { background: var(--c-out); }
+.bar-row .vals { text-align: right; line-height: 16px; font-size: 12px; }
+.legend { display: flex; gap: var(--sp-4); font-size: 12px; color: var(--c-ink-3); align-items: center; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.chart svg { display: block; width: 100%; height: auto; }
+
+/* 连续录入 */
+.ctx { display: flex; flex-wrap: wrap; gap: var(--sp-3) var(--sp-5); padding: var(--sp-4); border-bottom: 1px solid var(--c-divider); align-items: center; }
+.ctx .field { flex-direction: row; align-items: center; gap: var(--sp-2); }
+.ctx .field > label { white-space: nowrap; }
+.entry-row { display: grid; grid-template-columns: 1.1fr 0.9fr 0.8fr 2fr auto; gap: var(--sp-2); padding: var(--sp-4); background: var(--c-hover); border-bottom: 1px solid var(--c-divider); align-items: center; }
+.entry-row .ipt { background: var(--c-surface); border-color: var(--c-line); }
+.entry-row .ipt:focus { border-color: var(--c-primary); }
+.page-check { display: flex; gap: var(--sp-4); align-items: center; font-size: 13px; }
+
+/* 识别核对：左原图右表格 */
+.steps { display: flex; gap: var(--sp-2); align-items: center; font-size: 13px; color: var(--c-ink-3); flex-wrap: wrap; }
+.steps span { display: inline-flex; align-items: center; gap: 6px; }
+.steps span i { width: 20px; height: 20px; border-radius: 50%; display: inline-grid; place-items: center; font: 600 11px/1 var(--num); font-style: normal; background: var(--c-fill); color: var(--c-ink-2); }
+.steps span.done i { background: var(--c-repaid-light); color: var(--c-repaid); }
+.steps span.cur { color: var(--c-ink-1); font-weight: 500; }
+.steps span.cur i { background: var(--c-primary); color: var(--c-on-primary); }
+.steps .line { width: 24px; height: 1px; background: var(--c-line); }
+.rec { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.4fr); gap: var(--sp-5); align-items: start; }
+.photo { position: sticky; top: calc(var(--top-h) + 16px); padding: var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-3); }
+.photo .tools { display: flex; gap: var(--sp-2); align-items: center; }
+.photo .stage { background: var(--c-ink-2); border-radius: var(--r-s); padding: var(--sp-5); display: grid; place-items: center; overflow: hidden; }
+.ledger { position: relative; background: var(--c-paper); color: var(--c-paper-ink); font-family: var(--serif); padding: 34px 12px 14px; border-radius: 4px; box-shadow: 0 6px 18px rgba(0, 0, 0, .25); display: flex; flex-direction: row-reverse; transform: rotate(-1.2deg); transition: transform .3s; max-width: 100%; overflow: hidden; }
+.ledger .col { writing-mode: vertical-rl; display: flex; flex-direction: row; align-items: center; gap: 8px; width: 46px; height: 360px; font-size: 17px; letter-spacing: 2px; padding: 4px 0; border-left: 1px solid var(--c-paper-line); flex: none; }
+.ledger .col.hl { background: rgba(200, 55, 45, .12); }
+.ledger .col .nm { font-weight: 600; font-size: 19px; }
+.ledger .col .note { font-size: 11px; letter-spacing: 0; color: #5C4C3E; line-height: 13px; max-height: 120px; }
+.ledger .col .ar { writing-mode: horizontal-tb; font-family: var(--num); font-size: 14px; letter-spacing: 0; margin-block-start: 0; margin-inline-start: auto; }
+.ledger .corner { position: absolute; top: 10px; right: 14px; font-size: 12px; font-family: var(--sans); }
+.rec .tbl td { padding: 6px 8px; }
+.rec .tbl th { padding: 8px; }
+.rec .tbl .ipt { height: 32px; width: 100%; font-size: 13px; background: transparent; border-color: transparent; padding: 0 6px; }
+.rec .tbl .ipt:hover { background: var(--c-fill); }
+.rec .tbl .ipt:focus { background: var(--c-surface); border-color: var(--c-primary); }
+.rec .tbl tr.flag td { background: var(--c-pending-light); }
+.rec .tbl tr.flag.ok td { background: transparent; }
+.rec .flags { display: flex; gap: 4px; flex-wrap: wrap; }
+.drop { border: 1.5px dashed var(--c-ink-4); border-radius: var(--r-m); padding: 56px var(--sp-6); text-align: center; color: var(--c-ink-2); display: flex; flex-direction: column; gap: var(--sp-3); align-items: center; background: var(--c-surface); }
+.drop.over { border-color: var(--c-primary); background: var(--c-primary-light); }
+.drop svg.i { width: 32px; height: 32px; color: var(--c-ink-3); }
+
+/* 登录页 */
+.login { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.login .art { background: linear-gradient(150deg, var(--c-primary), var(--c-primary-dark)); color: var(--c-on-primary); padding: 56px; display: flex; flex-direction: column; justify-content: space-between; position: relative; overflow: hidden; }
+.login .art h1 { font: 600 40px/52px var(--serif); margin: 0; }
+.login .art p { color: var(--c-on-primary-2); max-width: 30em; }
+.login .art .big { position: absolute; right: -30px; bottom: -80px; font: 600 360px/1 var(--serif); color: rgba(255, 255, 255, .07); }
+.login .form { display: grid; place-items: center; padding: 40px max(16px, env(safe-area-inset-right, 0px)) 40px max(16px, env(safe-area-inset-left, 0px)); }
+.login .box { width: 380px; max-width: 100%; display: flex; flex-direction: column; gap: var(--sp-5); }
+.qr { width: 200px; height: 200px; margin: 0 auto; padding: 12px; background: var(--c-surface); border-radius: var(--r-m); box-shadow: var(--shadow-card); }
+.devbar { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4); border-radius: var(--r-s); background: var(--c-out-light); color: var(--c-out); font-size: 13px; }
+.devbar a { margin-left: auto; font-weight: 600; }
+
+/* 窄屏：导航改为顶部横向滚动，内容单列 */
+@media (max-width: 960px) {
+  :root { --gutter-x: 16px; }
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .side { position: static; height: auto; flex-direction: row; align-items: center; padding: var(--sp-2) max(16px, env(safe-area-inset-right, 0px)) var(--sp-2) max(16px, env(safe-area-inset-left, 0px)); overflow-x: auto; gap: var(--sp-3); border-right: 0; border-bottom: 1px solid var(--c-line); }
+  .brand div, .side .me, .nav h6, .nav a .badge { display: none; }
+  .nav { flex-direction: row; }
+  .nav a { white-space: nowrap; }
+  .top .search { width: auto; flex: 1; max-width: none; }
+  .top .search kbd { display: none; }
+  .crumbs, .top .lbl-t { display: none; }
+  .grid-2, .grid-2e, .rec, .login { grid-template-columns: minmax(0, 1fr); }
+  .hero { grid-template-columns: minmax(0, 1fr); padding: var(--sp-5); }
+  .hero::after { display: none; }
+  .hero .acts { flex-direction: row; flex-wrap: wrap; }
+  .hero .acts .btn { width: auto; }
+  .hero .acts .btn kbd { display: none; }
+  .hero .figs { gap: var(--sp-5); }
+  .photo { position: static; }
+  .entry-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .login .art { padding: 32px max(16px, env(safe-area-inset-left, 0px)); min-height: 220px; }
+  .login .art h1 { font-size: 28px; line-height: 36px; }
+  .field-row { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <aside class="side">
+    <div class="brand"><span class="stamp">礼</span><div><b>人情账本</b><small>朱砂礼簿 · 网页版</small></div></div>
+    <nav class="nav" id="nav"></nav>
+    <div class="me"><span class="avatar" style="background:var(--c-primary-light);color:var(--c-primary)">本</span><div><div>本机用户</div><small>管理员 · 开发免登录</small></div></div>
+  </aside>
+  <div style="min-width:0">
+    <header class="top">
+      <div class="crumbs" id="crumbs"></div>
+      <button class="search" data-act="search" aria-label="搜索"><svg class="i"><use href="#i-search"/></svg><span>搜姓名、金额、年份、页码</span><kbd>⌘K</kbd></button>
+      <button class="btn text" data-act="notes" title="本页交互说明"><svg class="i"><use href="#i-info"/></svg><span class="lbl-t">交互说明</span></button>
+      <button class="btn primary" data-act="entry"><svg class="i"><use href="#i-plus"/></svg>记一笔</button>
+    </header>
+    <main><div class="wrap" id="view"></div></main>
+  </div>
+</div>
+
+<div class="mask" id="mask" data-act="close"></div>
+<aside class="drawer" id="drawer" aria-modal="true" role="dialog"></aside>
+<aside class="drawer notes" id="notes" role="complementary"></aside>
+<div class="dialog" id="dialog" role="alertdialog"></div>
+<div class="palette" id="palette" role="dialog">
+  <div class="q"><svg class="i"><use href="#i-search"/></svg><input id="pq" placeholder="姓名或拼音首字母、事项、礼簿、金额 500、区间 500-1000、伍佰、2011、11年、p1-10" autocomplete="off"><kbd>Esc</kbd></div>
+  <div class="res" id="pres"></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.5 12 4l9 6.5"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r=".8"/><circle cx="4" cy="12" r=".8"/><circle cx="4" cy="18" r=".8"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.6 3.3-5.5 6.5-5.5s5.9 1.9 6.5 5.5"/><path d="M15.5 4.8a3.5 3.5 0 0 1 0 6.4M17.5 14.8c2.2.6 3.6 2.4 4 5.2"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M5 4.5h11a3 3 0 0 1 3 3V20H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11"/><path d="M9 8h6"/></symbol>
+  <symbol id="i-return" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20h16"/><path d="M7 16v-5M12 16V6M17 16v-8"/></symbol>
+  <symbol id="i-scan" viewBox="0 0 24 24"><path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16"/><path d="M8 12h8"/></symbol>
+  <symbol id="i-note" viewBox="0 0 24 24"><path d="M6 3.5h9l3.5 3.5V20.5H6z"/><path d="M14.5 3.5V7.5h4M9 12h6M9 16h4"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-left" viewBox="0 0 24 24"><path d="m14.5 6-6 6 6 6"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><path d="m9.5 6 6 6-6 6"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8h.01"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4 2.8 19.5h18.4z"/><path d="M12 10v4M12 17h.01"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5"/><path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/></symbol>
+  <symbol id="i-rotate" viewBox="0 0 24 24"><path d="M19.5 12A7.5 7.5 0 1 1 17 6.4"/><path d="M19.5 4v4.5H15"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5"/><path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/></symbol>
+  <symbol id="i-merge" viewBox="0 0 24 24"><path d="M6 4v4a6 6 0 0 0 6 6h0a6 6 0 0 1 6 6M18 4v4a6 6 0 0 1-6 6"/></symbol>
+  <symbol id="i-gift" viewBox="0 0 24 24"><rect x="4" y="9" width="16" height="11" rx="1.5"/><path d="M3 9h18M12 9v11M12 9c-2.5 0-5-1-5-3s3-2 5 3c2-5 5-5 5-3s-2.5 3-5 3"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13"/></symbol>
+  <symbol id="i-device" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="12" rx="1.5"/><path d="M8 20h8M12 16.5V20"/></symbol>
+</svg>
+
+<script>
+'use strict'
+// ———————————————————— 示例数据（只在内存中，刷新恢复） ————————————————————
+const TODAY = '2026-11-15'
+const PAL = { cinnabar: ['#C8372D', '#FBEDEA'], amber: ['#C27C0E', '#FBF0DB'], teal: ['#2E6E72', '#E5EFEF'], indigo: ['#3A63A0', '#E8EEF7'], rose: ['#C2577A', '#FAEBF0'], sage: ['#4F8A56', '#E8F1E7'], gold: ['#A9813A', '#F7F0E1'], stone: ['#6F665F', '#EFEBE6'] }
+const TYPES = { 红事: ['喜', 'cinnabar'], 白事: ['奠', 'stone'], 满月: ['满', 'rose'], 乔迁: ['迁', 'amber'], 升学: ['学', 'indigo'], 过年: ['年', 'gold'], 其他: ['礼', 'stone'] }
+const BOOK_CATS = { 人情礼: 'cinnabar', 火炮: 'amber', 其他: 'stone' }
+const ITEM_CATS = ['现金', '火炮', '实物礼品']
+const RELS = ['亲戚', '朋友', '同事', '邻居', '其他']
+
+const persons = [
+  [1, '张建国', '亲戚', 'zjg', '138 0731 2266', '大舅家表哥'], [2, '李秀英', '朋友', 'lxy', '139 7310 5521', ''], [3, '王德明', '同事', 'wdm', '', '原单位科长'],
+  [4, '刘桂兰', '邻居', 'lgl', '', '对门'], [5, '陈志强', '亲戚', 'czq', '137 8802 1190', '姑父'], [6, '杨春华', '朋友', 'ych', '', ''],
+  [7, '赵文斌', '同事', 'zwb', '', ''], [8, '孙丽娟', '亲戚', 'slj', '', '小姨'], [9, '周海涛', '朋友', 'zht', '', '高中同学'],
+  [10, '吴国平', '邻居', 'wgp', '', ''], [11, '郑小燕', '亲戚', 'zxy', '', '堂妹'], [12, '黄立新', '同事', 'hlx', '', ''],
+].map(([id, name, rel, py, phone, note]) => ({ id, name, rel, py, phone, note }))
+
+const events = [
+  [1, '儿子婚宴', '红事', '2025-10-02', '自家办', '县城福满楼'], [2, '孙女满月', '满月', '2026-03-15', '自家办', '家里'],
+  [3, '乔迁新居', '乔迁', '2026-08-18', '自家办', '幸福里小区'], [4, '张建国女儿升学', '升学', '2026-07-20', '别人家办', ''],
+  [5, '李秀英父亲丧事', '白事', '2026-01-09', '别人家办', ''], [6, '陈志强儿子婚宴', '红事', '2026-05-01', '别人家办', ''],
+  [7, '王德明乔迁', '乔迁', '2026-04-12', '别人家办', ''], [8, '赵文斌孩子满月', '满月', '2026-09-06', '别人家办', ''],
+  [9, '父亲六十大寿', '其他', '2011-09-20', '自家办', '老家'], [10, '纸本未注明事项', '其他', '', '别人家办', '系统占位'],
+].map(([id, name, type, date, host, place]) => ({ id, name, type, date, host, place }))
+
+const books = [
+  [1, '婚宴人情礼簿', '人情礼', 1, '2025 年国庆儿子婚宴主礼簿'], [2, '婚宴火炮簿', '火炮', 1, '婚宴当天另记的火炮'],
+  [3, '满月礼簿', '人情礼', 2, ''], [4, '乔迁礼簿', '人情礼', 3, ''], [5, '日常往来', '其他', 0, '平时去别人家的送礼'],
+  [6, '2011 寿宴老礼簿', '人情礼', 9, '父亲六十大寿，纸本带回礼标注'], [7, '婚宴补记', '人情礼', 1, '婚宴后补收的几笔'],
+].map(([id, name, cat, ev, desc]) => ({ id, name, cat, ev, desc, merged: 0, pages: {} }))
+books[6].merged = 1
+books[0].pages = { 'p1-10': 4200, 'p11-20': 3000 }
+books[5].pages = { 'p1-10': 550 }
+
+const R = []
+function add(p, e, b, dir, amt, date, status, x = {}) {
+  const cat = x.cat || (books[b - 1].cat === '火炮' ? '火炮' : '现金')
+  R.push(Object.assign({ id: R.length + 1, p, e, b, dir, cat, amt, gift: '', gv: 0, date, status, note: '', page: '', anno: '', annoDone: false, repayOf: [] }, x))
+}
+// 婚宴人情礼簿
+add(1, 1, 1, '收', 1000, '2025-10-02', 'repaid', { page: 'p1-10' })
+add(2, 1, 1, '收', 600, '2025-10-02', 'pending', { page: 'p1-10' })
+add(3, 1, 1, '收', 500, '2025-10-02', 'repaid', { page: 'p1-10' })
+add(4, 1, 1, '收', 300, '2025-10-02', 'pending', { page: 'p1-10' })
+add(5, 1, 1, '收', 2000, '2025-10-02', 'repaid', { page: 'p1-10' })
+add(6, 1, 1, '收', 600, '2025-10-02', 'pending', { page: 'p11-20' })
+add(7, 1, 1, '收', 500, '2025-10-02', 'none', { page: 'p11-20', note: '同事份子，约定不回' })
+add(8, 1, 1, '收', 1000, '2025-10-02', 'pending', { page: 'p11-20' })
+add(9, 1, 1, '收', 800, '2025-10-02', 'pending', { page: 'p11-20' })
+add(10, 1, 1, '收', 200, '2025-10-02', 'repaid', { page: 'p11-20', anno: '已回', annoDone: true, note: '纸本只有已回记号，无金额' })
+add(11, 1, 1, '收', 1200, '2025-10-02', 'pending', { page: 'p11-20' })
+// 婚宴火炮簿
+add(1, 1, 2, '收', 100, '2025-10-02', 'repaid')
+add(5, 1, 2, '收', 200, '2025-10-02', 'pending')
+add(8, 1, 2, '收', 100, '2025-10-02', 'pending')
+add(4, 1, 2, '收', 50, '2025-10-02', 'pending')
+// 婚宴补记（已合并到婚宴人情礼簿）
+add(12, 1, 1, '收', 500, '2025-10-06', 'pending', { note: '原记在《婚宴补记》' })
+// 满月礼簿
+add(2, 2, 3, '收', 500, '2026-03-15', 'pending')
+add(11, 2, 3, '收', 800, '2026-03-15', 'pending')
+add(6, 2, 3, '收', 400, '2026-03-15', 'pending')
+add(1, 2, 3, '收', 600, '2026-03-15', 'pending')
+add(12, 2, 3, '收', 300, '2026-03-15', 'pending')
+add(4, 2, 3, '收', 0, '2026-03-15', 'pending', { cat: '实物礼品', gift: '婴儿银手镯', gv: 380 })
+// 乔迁礼簿
+add(3, 3, 4, '收', 600, '2026-08-18', 'pending')
+add(9, 3, 4, '收', 500, '2026-08-18', 'pending')
+add(5, 3, 4, '收', 1000, '2026-08-18', 'pending')
+add(10, 3, 4, '收', 300, '2026-08-18', 'pending')
+// 日常往来：回礼与主动送礼
+add(1, 4, 5, '送', 1100, '2026-07-20', 'none', { repayOf: [1, 12] })
+add(5, 6, 5, '送', 2000, '2026-05-01', 'none', { repayOf: [5] })
+add(3, 7, 5, '送', 600, '2026-04-12', 'none', { repayOf: [3] })
+add(2, 5, 5, '送', 800, '2026-01-09', 'pending', { note: '白事随礼' })
+add(7, 8, 5, '送', 500, '2026-09-06', 'pending')
+add(12, 10, 5, '送', 0, '2026-02-10', 'pending', { cat: '实物礼品', gift: '烟酒一套', gv: 600, note: '过年拜访' })
+// 2011 寿宴老礼簿：带纸本回礼标注
+add(8, 9, 6, '收', 200, '2011-09-20', 'pending', { page: 'p1-10', anno: '11年国庆 孙女 100元 火炮20元' })
+add(9, 9, 6, '收', 100, '2011-09-20', 'pending', { page: 'p1-10', anno: '10年8月1日 生日 500' })
+add(11, 9, 6, '收', 150, '2011-09-20', 'pending', { page: 'p1-10', anno: '11年正月 办儿 50元' })
+add(6, 9, 6, '收', 100, '2011-09-20', 'pending', { page: 'p1-10' })
+
+// ———————————————————— 工具 ————————————————————
+const $ = (s, el = document) => el.querySelector(s)
+const byId = (arr, id) => arr.find(x => x.id === +id)
+const P = id => byId(persons, id), E = id => byId(events, id), B = id => byId(books, id)
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+const icon = n => `<svg class="i"><use href="#i-${n}"/></svg>`
+const val = r => r.amt + r.gv
+const live = () => R.filter(r => !B(r.b).merged)
+function yuan(n, sign) { const s = Math.abs(n).toLocaleString('en-US'); return (sign ? (n < 0 ? '−' : '+') : (n < 0 ? '−' : '')) + '¥' + s }
+function compact(n) { return Math.abs(n) >= 100000 ? '¥' + (n / 10000).toFixed(2).replace(/\.?0+$/, '') + '万' : yuan(n) }
+function fdate(d, prec = 'day') {
+  if (!d) return '<span class="muted">未注明</span>'
+  const [y, m, dd] = d.split('-').map(Number), cur = y === +TODAY.slice(0, 4)
+  if (prec === 'year') return `${y}年<span class="approx">约</span>`
+  if (prec === 'month') return `${cur ? '' : y + '年'}${m}月<span class="approx">约</span>`
+  return `${cur ? '' : y + '年'}${m}月${dd}日`
+}
+function ago(d) {
+  const a = new Date(TODAY), b = new Date(d), mo = (a.getFullYear() - b.getFullYear()) * 12 + a.getMonth() - b.getMonth()
+  return mo < 1 ? '本月' : mo < 12 ? `${mo} 个月前` : `${Math.floor(mo / 12)} 年前`
+}
+function upper(n) {
+  if (!n) return ''
+  const d = '零壹贰叁肆伍陆柒捌玖', u = ['', '拾', '佰', '仟']
+  const sec = x => { let s = '', z = false; for (let i = 3; i >= 0; i--) { const g = Math.floor(x / 10 ** i) % 10; if (!g) { if (s) z = true } else { if (z) { s += '零'; z = false } s += d[g] + u[i] } } return s }
+  const hi = Math.floor(n / 10000), lo = n % 10000
+  let s = hi ? sec(hi) + '万' : ''
+  if (lo) s += (hi && lo < 1000 ? '零' : '') + sec(lo)
+  return s + '元'
+}
+function seal(ev, lg) { const [ch, c] = TYPES[ev.type]; const [m, l] = PAL[c]; return `<span class="seal${lg ? ' lg' : ''}" style="color:${m};background:${l}" title="${ev.type}">${ch}</span>` }
+function avatar(p) { const c = Object.values(PAL)[p.id % 8]; return `<span class="avatar" style="background:${c[1]};color:${c[0]}">${esc(p.name.slice(-1))}</span>` }
+function catChip(cat) { const [m, l] = PAL[BOOK_CATS[cat] || 'stone']; return `<span class="pill" style="background:${l};color:${m}">${esc(cat)}</span>` }
+function dirTag(r) { return `<span class="dir ${r.dir === '收' ? 'in' : 'out'}">${r.dir}</span>` }
+function money(r, cls) {
+  if (!r.amt && r.gift) return `<span class="cell-2" style="justify-content:flex-end">${icon('gift')}<span class="t" style="text-align:right">${esc(r.gift)}${r.gv ? `<small>估 ${yuan(r.gv)}</small>` : ''}</span></span>`
+  return `<span class="amt ${cls || (r.dir === '收' ? 'in' : 'out')}">${yuan(r.amt)}</span>`
+}
+function statusOf(r) {
+  if (r.repayOf.length) return ['back', '回礼']
+  const t = r.dir === '收' ? { pending: '未回礼', repaid: '已回礼', none: '不用回' } : { pending: '对方未回', repaid: '对方已回', none: '不用回' }
+  return [r.status, t[r.status]]
+}
+const pill = r => { const [c, t] = statusOf(r); return `<span class="pill ${c}">${t}</span>` }
+const isOwe = r => r.dir === '收' && r.status === 'pending'
+function sum(rs) { const o = { in: 0, out: 0, n: rs.length, owe: 0, oweN: 0 }; rs.forEach(r => { if (r.dir === '收') o.in += val(r); else o.out += val(r); if (isOwe(r)) { o.owe += val(r); o.oweN++ } }); return o }
+function groupBy(rs, key) { const m = new Map(); rs.forEach(r => { const k = key(r); if (!m.has(k)) m.set(k, []); m.get(k).push(r) }); return m }
+
+// ———————————————————— 状态与路由 ————————————————————
+const st = { recF: { cat: '', type: '', person: '', year: '', dir: '', status: '', item: '' }, recSel: 0, recPage: 1, peopleQ: '', peopleRel: '', repayView: 'mine', eventView: 'came', bookTab: 'records', statYear: '2026', cont: { page: 'p21-30', total: '', date: '2025-10-02', ev: 1, rows: [] }, recog: null, selOwe: new Set() }
+
+const NAV = [
+  ['home', '工作台', 'home'], ['records', '记录', 'list'], ['people', '亲友', 'users'], ['events', '事项', 'cal'], ['books', '礼簿', 'book'],
+  ['repay', '回礼清单', 'return', () => sum(live()).oweN], ['stats', '统计', 'chart'],
+  ['-', '纸本录入'], ['recognize', '识别礼簿', 'scan'], ['notes-todo', '整理纸本标注', 'note', () => live().filter(r => r.anno && !r.annoDone).length], ['pages', '按页核对', 'check'],
+  ['-', ''], ['prefs', '设置', 'gear'],
+]
+function route() { const h = (location.hash || '#home').slice(1); const i = h.lastIndexOf('-'); const id = +h.slice(i + 1); return id && i > 0 ? [h.slice(0, i), id] : [h, 0] }
+function go(h) { if (location.hash === '#' + h) render(); else location.hash = h }
+
+function render() {
+  const [name, id] = route()
+  const fn = PAGES[name] || PAGES.home
+  const out = fn(id)
+  $('#app').classList.toggle('bare', name === 'login')
+  $('#view').innerHTML = out.html
+  $('#crumbs').innerHTML = (out.crumbs || []).map(([t, h]) => `<a href="#${h}">${t}</a>${icon('right')}`).join('') + `<b>${out.title}</b>`
+  const navKey = out.nav || name
+  $('#nav').innerHTML = NAV.map(([k, t, ic, badge]) => k === '-' ? (t ? `<h6>${t}</h6>` : '<h6></h6>') : `<a href="#${k}" class="${k === navKey ? 'on' : ''}">${icon(ic)}${t}${badge && badge() ? `<span class="badge">${badge()}</span>` : ''}</a>`).join('')
+  document.title = out.title + ' · 人情账本'
+  out.after && out.after()
+  if ($('#notes').classList.contains('on')) openNotes()
+}
+
+// ———————————————————— 记录表格（多页共用） ————————————————————
+function recTable(rs, opt = {}) {
+  if (!rs.length) return `<div class="empty">没有符合条件的记录</div>`
+  const cols = opt.cols || ['date', 'person', 'event', 'book', 'cat', 'amt', 'status']
+  const H = { chk: '', date: '日期', person: '亲友', event: '事项', book: '礼簿', cat: '名目', amt: '<span style="display:block;text-align:right">金额</span>', status: '状态', page: '纸本', anno: '纸本标注', ops: '' }
+  const C = {
+    chk: r => isOwe(r) ? `<input type="checkbox" class="chk" data-owe="${r.id}" ${st.selOwe.has(r.id) ? 'checked' : ''} aria-label="选中">` : '',
+    date: r => `<span class="sm">${fdate(r.date)}</span>`,
+    person: r => { const p = P(r.p); return `<a class="cell-2" href="#person-${p.id}" data-stop>${avatar(p)}<span class="t">${esc(p.name)}<small>${p.rel}</small></span></a>` },
+    event: r => { const e = E(r.e); return `<span class="cell-2">${seal(e)}<span class="t">${esc(e.name)}</span></span>` },
+    book: r => `<span class="sm">${esc(B(r.b).name)}</span>`,
+    cat: r => `<span class="sm muted">${r.cat}</span>`,
+    amt: r => `<div style="display:flex;justify-content:flex-end;gap:8px;align-items:center">${dirTag(r)}${money(r)}</div>`,
+    status: r => pill(r),
+    page: r => `<span class="sm muted">${esc(r.page) || '—'}</span>`,
+    anno: r => r.anno ? `<span class="sm">${esc(r.anno)}</span>` : '<span class="muted sm">—</span>',
+    ops: r => opt.ops(r),
+  }
+  return `<div class="tbl-wrap"><table class="tbl"><thead><tr>${cols.map(c => `<th>${H[c]}</th>`).join('')}</tr></thead><tbody>${rs.map(r => `<tr class="link${st.recSel === r.id ? ' sel' : ''}" data-rec="${r.id}">${cols.map((c, i) => `<td class="${i === 0 && isOwe(r) ? 'pend-bar' : ''}">${C[c](r)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`
+}
+
+// ———————————————————— 页面 ————————————————————
+const PAGES = {}
+
+PAGES.home = () => {
+  const y = TODAY.slice(0, 4), rs = live(), ry = rs.filter(r => r.date.startsWith(y)), s = sum(ry), all = sum(rs)
+  const recent = [...rs].sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id).slice(0, 7)
+  const owe = [...groupBy(rs.filter(isOwe), r => r.p)].map(([p, l]) => ({ p: P(p), n: l.length, v: l.reduce((a, r) => a + val(r), 0), old: l.map(r => r.date).sort()[0] })).sort((a, b) => a.old.localeCompare(b.old) || b.v - a.v).slice(0, 5)
+  const evs = events.filter(e => e.date && e.id !== 10).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 4)
+  return {
+    title: '工作台', html: `
+    <section class="hero">
+      <div>
+        <div class="greet">下午好<small>${y} 年 11 月 15 日 · 周日</small></div>
+        <div class="figs">
+          <div><div class="k">${y} 年收礼</div><div class="v">${compact(s.in)}</div></div>
+          <div><div class="k">${y} 年送礼</div><div class="v">${compact(s.out)}</div></div>
+          <div><div class="k">净差额</div><div class="v s">${yuan(s.in - s.out, true)}</div></div>
+        </div>
+        <a class="owe" href="#repay">${icon('return')}全部未回礼 ${all.oweN} 笔 · ${yuan(all.owe)}${icon('right')}</a>
+      </div>
+      <div class="acts">
+        <button class="btn main" data-act="entry">${icon('plus')}记一笔<kbd>N</kbd></button>
+        <a class="btn" href="#book-1" data-tab="cont">${icon('list')}连续录入</a>
+        <a class="btn" href="#recognize">${icon('scan')}识别礼簿</a>
+        <a class="btn" href="#prefs">${icon('download')}导入导出</a>
+      </div>
+    </section>
+    <div class="grid-2">
+      <section class="section">
+        <div class="sec-head"><h2>最近记录</h2><span class="sub">按发生日期</span><div class="tools"><a class="btn text sm" href="#records">全部记录${icon('right')}</a></div></div>
+        <div class="card">${recTable(recent, { cols: ['date', 'person', 'event', 'book', 'amt', 'status'] })}</div>
+      </section>
+      <div style="display:flex;flex-direction:column;gap:var(--sp-7);min-width:0">
+        <section class="section">
+          <div class="sec-head"><h2>最久没回的</h2><div class="tools"><a class="btn text sm" href="#repay">回礼清单${icon('right')}</a></div></div>
+          <div class="card list">${owe.map(o => `<a class="row" href="#person-${o.p.id}">${avatar(o.p)}<div class="grow">${esc(o.p.name)}<small>${o.n} 笔 · 最早 ${ago(o.old)}</small></div><span class="amt pend">${yuan(o.v)}</span></a>`).join('')}</div>
+        </section>
+        <section class="section">
+          <div class="sec-head"><h2>近期事项</h2><div class="tools"><a class="btn text sm" href="#events">全部事项${icon('right')}</a></div></div>
+          <div class="card list">${evs.map(e => { const t = sum(rs.filter(r => r.e === e.id)); return `<a class="row" href="#event-${e.id}">${seal(e)}<div class="grow">${esc(e.name)}<small>${fdate(e.date)} · ${e.host}</small></div>${t.in ? `<span class="amt in">${yuan(t.in)}</span>` : `<span class="amt out">${yuan(t.out)}</span>`}</a>` }).join('')}</div>
+        </section>
+      </div>
+    </div>`,
+  }
+}
+
+function filterRecords(rs, f) {
+  return rs.filter(r => {
+    const p = P(r.p), e = E(r.e), b = B(r.b)
+    if (f.cat && b.cat !== f.cat) return false
+    if (f.type && e.type !== f.type) return false
+    if (f.person && !(p.name.includes(f.person) || p.py.startsWith(f.person.toLowerCase()))) return false
+    if (f.year && !r.date.startsWith(f.year)) return false
+    if (f.dir && r.dir !== f.dir) return false
+    if (f.item && r.cat !== f.item) return false
+    if (f.status) { if (r.dir !== (f.dir || '收')) return false; if (r.repayOf.length || r.status !== f.status) return false }
+    return true
+  })
+}
+function filterBar(f, scope) {
+  const opt = (arr, v, ph) => `<option value="">${ph}</option>` + arr.map(x => `<option ${x === v ? 'selected' : ''}>${x}</option>`).join('')
+  const years = [...new Set(R.map(r => r.date.slice(0, 4)))].sort().reverse()
+  const stLabels = (f.dir || '收') === '收' ? [['pending', '未回礼'], ['repaid', '已回礼'], ['none', '不用回']] : [['pending', '对方未回'], ['repaid', '对方已回'], ['none', '不用回']]
+  return `<div class="filters" data-scope="${scope}">
+    <select class="ipt" data-f="cat" aria-label="礼簿类别">${opt(Object.keys(BOOK_CATS), f.cat, '礼簿类别')}</select>
+    <select class="ipt" data-f="type" aria-label="事项类型">${opt(Object.keys(TYPES), f.type, '事项类型')}</select>
+    <input class="ipt" data-f="person" value="${esc(f.person)}" placeholder="亲友姓名或首字母" style="width:150px" aria-label="亲友">
+    <select class="ipt" data-f="year" aria-label="时间">${opt(years, f.year, '全部年份')}</select>
+    <span class="gap"></span>
+    <div class="seg dirseg" data-f="dir">${['', '收', '送'].map(v => `<button data-v="${v}" class="${f.dir === v ? 'on' : ''}">${v || '全部'}</button>`).join('')}</div>
+    <select class="ipt" data-f="status" aria-label="回礼状态"><option value="">回礼状态</option>${stLabels.map(([v, t]) => `<option value="${v}" ${f.status === v ? 'selected' : ''}>${t}</option>`).join('')}</select>
+    <select class="ipt" data-f="item" aria-label="名目">${opt(ITEM_CATS, f.item, '名目')}</select>
+    <div class="right">${Object.values(f).some(Boolean) ? `<button class="btn text sm" data-act="clearF" data-scope="${scope}">清除筛选</button>` : ''}</div>
+  </div>`
+}
+
+PAGES.records = () => {
+  const rs = filterRecords(live(), st.recF).sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id), s = sum(rs)
+  const per = 12, pages = Math.max(1, Math.ceil(rs.length / per)); st.recPage = Math.min(st.recPage, pages)
+  const view = rs.slice((st.recPage - 1) * per, st.recPage * per)
+  return {
+    title: '记录', html: `
+    <div class="page-head"><div><h1>全部记录</h1><div class="meta">跨全部礼簿；已合并的礼簿按目标礼簿显示</div></div>
+      <div class="tools"><a class="btn" href="#prefs">${icon('download')}导出当前结果</a><button class="btn" data-act="entry">${icon('plus')}记一笔</button></div></div>
+    <div class="card">
+      ${filterBar(st.recF, 'recF')}
+      ${recTable(view, { cols: ['date', 'person', 'event', 'book', 'cat', 'amt', 'status'] })}
+      <div class="sumbar"><span>${s.n} 笔</span><span>收 <b class="amt in">${yuan(s.in)}</b></span><span>送 <b class="amt out">${yuan(s.out)}</b></span><span>其中未回礼 <b class="amt pend">${yuan(s.owe)}</b></span>
+        <div class="pager"><button class="btn text sm" data-act="pg" data-d="-1" ${st.recPage <= 1 ? 'disabled' : ''} aria-label="上一页">${icon('left')}</button><span class="num">${st.recPage} / ${pages}</span><button class="btn text sm" data-act="pg" data-d="1" ${st.recPage >= pages ? 'disabled' : ''} aria-label="下一页">${icon('right')}</button></div></div>
+    </div>`,
+  }
+}
+
+PAGES.people = () => {
+  const q = st.peopleQ.trim().toLowerCase()
+  const list = persons.filter(p => (!st.peopleRel || p.rel === st.peopleRel) && (!q || p.name.includes(q) || p.py.startsWith(q))).map(p => { const rs = live().filter(r => r.p === p.id); return { p, s: sum(rs), last: rs.map(r => r.date).sort().pop() } })
+  return {
+    title: '亲友', html: `
+    <div class="page-head"><div><h1>亲友</h1><div class="meta">${persons.length} 人；同一人只有一个条目，往来跨全部礼簿合计</div></div><div class="tools"><button class="btn" data-act="newPerson">${icon('plus')}新建亲友</button></div></div>
+    <div class="card">
+      <div class="filters"><input class="ipt" id="pq2" value="${esc(st.peopleQ)}" placeholder="姓名或拼音首字母，如 zjg" style="width:240px" aria-label="搜索亲友">
+        <div class="seg" data-act="rel">${['', ...RELS].map(v => `<button data-v="${v}" class="${st.peopleRel === v ? 'on' : ''}">${v || '全部'}</button>`).join('')}</div></div>
+      <div class="tbl-wrap"><table class="tbl"><thead><tr><th>姓名</th><th>关系</th><th class="r">总收</th><th class="r">总送</th><th class="r">净差额</th><th class="r">未回礼</th><th>最近往来</th></tr></thead><tbody>
+      ${list.map(({ p, s, last }) => `<tr class="link" data-href="person-${p.id}"><td class="${s.oweN ? 'pend-bar' : ''}"><span class="cell-2">${avatar(p)}<span class="t">${esc(p.name)}<small>${esc(p.note) || '&nbsp;'}</small></span></span></td><td class="sm">${p.rel}</td><td class="r"><span class="amt in">${yuan(s.in)}</span></td><td class="r"><span class="amt out">${yuan(s.out)}</span></td><td class="r amt">${yuan(s.in - s.out, true)}</td><td class="r">${s.oweN ? `<span class="amt pend">${s.oweN} 笔 ${yuan(s.owe)}</span>` : '<span class="muted">—</span>'}</td><td class="sm muted">${last ? ago(last) : '—'}</td></tr>`).join('') || '<tr><td colspan="7"><div class="empty">没有找到，试试拼音首字母</div></td></tr>'}
+      </tbody></table></div>
+    </div>`,
+    after() { const i = $('#pq2'); i.oninput = () => { st.peopleQ = i.value; const pos = i.selectionStart; render(); const j = $('#pq2'); j.focus(); j.setSelectionRange(pos, pos) } },
+  }
+}
+
+PAGES.person = id => {
+  const p = P(id); if (!p) return PAGES.people()
+  const all = live().filter(r => r.p === p.id), s = sum(all)
+  const groups = [...groupBy([...all].sort((a, b) => b.date.localeCompare(a.date)), r => r.e)]
+  const sel = [...st.selOwe].filter(i => all.some(r => r.id === i))
+  return {
+    title: p.name, crumbs: [['亲友', 'people']], nav: 'people', html: `
+    <div class="page-head"><div class="profile">${avatar(p)}<div><h1>${esc(p.name)}</h1><div class="meta">${p.rel}${p.phone ? ' · ' + p.phone : ''}${p.note ? ' · ' + esc(p.note) : ''}</div></div></div>
+      <div class="tools"><button class="btn" data-act="editPerson" data-id="${p.id}">${icon('edit')}编辑</button><button class="btn" data-act="repay" ${sel.length ? '' : 'disabled'} title="先勾选要回的收礼记录">${icon('return')}回礼${sel.length ? ` · 已选 ${sel.length} 笔` : ''}</button><button class="btn primary" data-act="entry" data-p="${p.id}">${icon('plus')}给 ${esc(p.name)} 记一笔</button></div></div>
+    <div class="stats">
+      <div class="card stat"><div class="v" style="color:var(--c-in)">${yuan(s.in)}</div><div class="k">总收</div></div>
+      <div class="card stat"><div class="v" style="color:var(--c-out)">${yuan(s.out)}</div><div class="k">总送</div></div>
+      <div class="card stat"><div class="v">${yuan(s.in - s.out, true)}</div><div class="k">净差额</div></div>
+      <div class="card stat"><div class="v" style="color:var(--c-pending)">${s.oweN} 笔 · ${yuan(s.owe)}</div><div class="k">未回礼（勾选后点"回礼"）</div></div>
+    </div>
+    <section class="section">
+      <div class="sec-head"><h2>往来时间线</h2><span class="sub">按事项分组；同一事项跨礼簿、跨名目合计</span></div>
+      <div class="card">${groups.map(([eid, rs]) => { const e = E(eid), t = sum(rs); return `<div class="group"><div class="group-head">${seal(e)}<div class="t"><a href="#event-${e.id}"><b>${esc(e.name)}</b></a><small>${fdate(e.date)} · ${e.host} · ${rs.length} 笔分布在 ${new Set(rs.map(r => r.b)).size} 本礼簿</small></div><div class="subtotal">${t.in ? `<span>收 <b class="amt in">${yuan(t.in)}</b></span>` : ''}${t.out ? `<span>送 <b class="amt out">${yuan(t.out)}</b></span>` : ''}</div></div>${recTable(rs, { cols: ['chk', 'date', 'book', 'cat', 'amt', 'status'] })}</div>` }).join('') || '<div class="empty">还没有往来</div>'}</div>
+    </section>`,
+  }
+}
+
+PAGES.events = () => {
+  const rows = events.map(e => ({ e, s: sum(live().filter(r => r.e === e.id)), ppl: new Set(live().filter(r => r.e === e.id).map(r => r.p)).size })).sort((a, b) => (b.e.date || '0').localeCompare(a.e.date || '0'))
+  return {
+    title: '事项', html: `
+    <div class="page-head"><div><h1>事项</h1><div class="meta">一次具体的人情事件；自家办的看"谁来了"，别人家办的看"我送了多少"</div></div><div class="tools"><button class="btn" data-act="todo" data-msg="新建事项：名称、类型、日期、地点、主办方、备注">${icon('plus')}新建事项</button></div></div>
+    <div class="card"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>事项</th><th>日期</th><th>主办方</th><th class="r">人数</th><th class="r">收</th><th class="r">送</th><th class="r">未回礼</th></tr></thead><tbody>
+    ${rows.map(({ e, s, ppl }) => `<tr class="link" data-href="event-${e.id}"><td><span class="cell-2">${seal(e)}<span class="t">${esc(e.name)}<small>${e.type}${e.place ? ' · ' + esc(e.place) : ''}</small></span></span></td><td class="sm">${fdate(e.date)}</td><td><span class="pill ${e.host === '自家办' ? 'neutral' : 'none'}">${e.host}</span></td><td class="r num">${ppl}</td><td class="r">${s.in ? `<span class="amt in">${yuan(s.in)}</span>` : '<span class="muted">—</span>'}</td><td class="r">${s.out ? `<span class="amt out">${yuan(s.out)}</span>` : '<span class="muted">—</span>'}</td><td class="r">${s.oweN ? `<span class="amt pend">${s.oweN} 笔</span>` : '<span class="muted">—</span>'}</td></tr>`).join('')}
+    </tbody></table></div></div>`,
+  }
+}
+
+PAGES.event = id => {
+  const e = E(id); if (!e) return PAGES.events()
+  const rs = live().filter(r => r.e === e.id), s = sum(rs)
+  const byP = [...groupBy(rs, r => r.p)].map(([pid, l]) => ({ p: P(pid), l, s: sum(l), back: R.filter(x => x.repayOf.some(o => l.some(r => r.id === o))) }))
+  const views = { came: ['谁来了', byP.filter(x => x.s.in)], back: ['我回了', byP.filter(x => x.back.length)], owe: ['还有谁没回', byP.filter(x => x.s.oweN)] }
+  const list = views[st.eventView][1]
+  return {
+    title: e.name, crumbs: [['事项', 'events']], nav: 'events', html: `
+    <div class="page-head"><div class="profile">${seal(e, true)}<div><h1>${esc(e.name)}</h1><div class="meta">${e.type} · ${fdate(e.date)} · ${e.host}${e.place ? ' · ' + esc(e.place) : ''}</div></div></div>
+      <div class="tools"><button class="btn" data-act="todo" data-msg="编辑事项；删除只在事项下没有记录时可用">${icon('edit')}编辑</button><button class="btn primary" data-act="entry" data-e="${e.id}">${icon('plus')}在此事项记一笔</button></div></div>
+    <div class="stats">
+      <div class="card stat"><div class="v" style="color:var(--c-in)">${yuan(s.in)}</div><div class="k">总收入</div></div>
+      <div class="card stat"><div class="v" style="color:var(--c-out)">${yuan(s.out)}</div><div class="k">总送出</div></div>
+      <div class="card stat"><div class="v">${byP.length}</div><div class="k">参与人数</div></div>
+      <div class="card stat"><div class="v">${rs.filter(r => r.dir === '收' && r.status === 'repaid').length} / <span style="color:var(--c-pending)">${s.oweN}</span></div><div class="k">已回礼 / 未回礼笔数</div></div>
+    </div>
+    <section class="section">
+      <div class="sec-head"><div class="seg" data-act="eview">${Object.entries(views).map(([k, [t, l]]) => `<button data-v="${k}" class="${st.eventView === k ? 'on' : ''}">${t} <span class="num muted">${l.length}</span></button>`).join('')}</div><span class="sub">按人合计，点开看分礼簿、分名目明细</span></div>
+      <div class="card"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>亲友</th><th>明细</th><th class="r">${st.eventView === 'back' ? '我回了' : '合计'}</th><th>状态</th></tr></thead><tbody>
+      ${list.map(x => `<tr class="link" data-href="person-${x.p.id}"><td class="${x.s.oweN ? 'pend-bar' : ''}"><span class="cell-2">${avatar(x.p)}<span class="t">${esc(x.p.name)}<small>${x.p.rel}</small></span></span></td>
+        <td class="sm">${(st.eventView === 'back' ? x.back : x.l).map(r => `<span class="muted">${esc(B(r.b).name)} · ${r.cat}</span> ${r.amt ? yuan(r.amt) : esc(r.gift)}`).join('<br>')}</td>
+        <td class="r">${st.eventView === 'back' ? `<span class="amt out">${yuan(x.back.reduce((a, r) => a + val(r), 0))}</span>` : `<span class="amt ${x.s.in ? 'in' : 'out'}">${yuan(x.s.in || x.s.out)}</span>`}</td>
+        <td>${x.s.oweN ? `<span class="pill pending">未回礼 ${x.s.oweN} 笔</span>` : x.back.length ? '<span class="pill repaid">已回礼</span>' : pill(x.l[0])}</td></tr>`).join('') || '<tr><td colspan="4"><div class="empty">这里没有人</div></td></tr>'}
+      </tbody></table></div></div>
+    </section>`,
+  }
+}
+
+PAGES.books = () => {
+  const act = books.filter(b => !b.merged), mer = books.filter(b => b.merged)
+  const row = b => { const rs = R.filter(r => r.b === b.id), s = sum(rs), ev = E(b.ev); return `<tr class="link" data-href="book-${b.id}"><td><span class="cell-2"><span class="seal" style="color:${PAL[BOOK_CATS[b.cat]][0]};background:${PAL[BOOK_CATS[b.cat]][1]}">簿</span><span class="t">${esc(b.name)}<small>${esc(b.desc) || '&nbsp;'}</small></span></span></td><td>${catChip(b.cat)}</td><td class="sm">${ev ? esc(ev.name) : '<span class="muted">—</span>'}</td><td class="r num">${rs.length}</td><td class="r">${s.in ? `<span class="amt in">${yuan(s.in)}</span>` : '<span class="muted">—</span>'}</td><td class="r">${s.out ? `<span class="amt out">${yuan(s.out)}</span>` : '<span class="muted">—</span>'}</td><td class="sm">${b.merged ? `并入《${esc(B(b.merged).name)}》` : `<span class="muted">${Object.keys(b.pages).length ? Object.keys(b.pages).length + ' 页已核对' : ''}</span>`}</td></tr>` }
+  const head = '<thead><tr><th>礼簿</th><th>类别</th><th>默认事项</th><th class="r">记录</th><th class="r">收</th><th class="r">送</th><th></th></tr></thead>'
+  return {
+    title: '礼簿', html: `
+    <div class="page-head"><div><h1>礼簿</h1><div class="meta">一本纸质礼簿对应一本；设了默认事项后，记账、连续录入、识别都自动带出</div></div><div class="tools"><button class="btn" data-act="merge">${icon('merge')}合并礼簿</button><button class="btn" data-act="todo" data-msg="新建礼簿：名称、类别（人情礼/火炮/其他）、默认事项、描述">${icon('plus')}新建礼簿</button></div></div>
+    <div class="card"><div class="tbl-wrap"><table class="tbl">${head}<tbody>${act.map(row).join('')}</tbody></table></div></div>
+    <section class="section"><div class="sec-head"><h2>已合并</h2><span class="sub">不出现在默认列表；记录已归到目标礼簿，保留原礼簿以便追溯</span></div>
+    <div class="card"><div class="tbl-wrap"><table class="tbl">${head}<tbody>${mer.map(row).join('')}</tbody></table></div></div></section>`,
+  }
+}
+
+function pageRows(b) {
+  const rs = R.filter(r => r.b === b.id && r.page), marks = [...new Set([...Object.keys(b.pages), ...rs.map(r => r.page)])].sort()
+  return marks.map(m => { const l = rs.filter(r => r.page === m), got = l.reduce((a, r) => a + val(r), 0), paper = b.pages[m]; return { b, m, n: l.length, got, paper, diff: paper == null ? null : got - paper } })
+}
+
+PAGES.book = id => {
+  const b = B(id); if (!b) return PAGES.books()
+  const rs = R.filter(r => r.b === b.id).sort((a, c) => (a.page || 'z').localeCompare(c.page || 'z') || a.id - c.id), s = sum(rs), ev = E(b.ev)
+  const notes = rs.filter(r => r.anno && !r.annoDone), pr = pageRows(b)
+  const tabs = { records: ['记录', rs.length], cont: ['连续录入', null], pages: ['按页核对', pr.length], notes: ['整理纸本标注', notes.length] }
+  let body = ''
+  if (st.bookTab === 'records') body = recTable(rs, { cols: ['page', 'person', 'event', 'cat', 'amt', 'status', 'anno'] })
+  if (st.bookTab === 'pages') body = pagesTable(pr)
+  if (st.bookTab === 'notes') body = notesTable(notes)
+  if (st.bookTab === 'cont') body = contForm(b)
+  return {
+    title: b.name, crumbs: [['礼簿', 'books']], nav: 'books', html: `
+    ${b.merged ? `<div class="alert info">${icon('info')}<span>这本礼簿已并入《${esc(B(b.merged).name)}》，只读查看。</span></div>` : ''}
+    <div class="page-head"><div><h1>${esc(b.name)}</h1><div class="meta">${catChip(b.cat)} &nbsp;默认事项：${ev ? esc(ev.name) : '无'}${b.desc ? ' · ' + esc(b.desc) : ''}</div></div>
+      <div class="tools"><button class="btn" data-act="merge" data-src="${b.id}">${icon('merge')}合并到…</button><button class="btn" data-act="todo" data-msg="编辑礼簿；删除只在礼簿下没有记录时可用">${icon('edit')}编辑</button><button class="btn primary" data-act="entry" data-b="${b.id}">${icon('plus')}在本簿记一笔</button></div></div>
+    <div class="stats">
+      <div class="card stat"><div class="v num">${s.n}</div><div class="k">记录</div></div>
+      <div class="card stat"><div class="v" style="color:var(--c-in)">${yuan(s.in)}</div><div class="k">收</div></div>
+      <div class="card stat"><div class="v" style="color:var(--c-out)">${yuan(s.out)}</div><div class="k">送</div></div>
+      <div class="card stat"><div class="v" style="color:var(--c-pending)">${s.oweN} 笔</div><div class="k">未回礼</div></div>
+    </div>
+    <div class="tabs" role="tablist">${Object.entries(tabs).map(([k, [t, n]]) => `<button data-act="btab" data-v="${k}" class="${st.bookTab === k ? 'on' : ''}">${t}${n != null ? `<span class="n">${n}</span>` : ''}</button>`).join('')}</div>
+    <div class="card">${body}</div>`,
+    after() { if (st.bookTab === 'cont') { const n = $('#c-name'); n && n.focus() } },
+  }
+}
+
+function pagesTable(pr) {
+  if (!pr.length) return '<div class="empty">还没有填纸本页码。连续录入和识别时填上"纸本标记"与"本页合计"，这里就能逐页对账。</div>'
+  return `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>礼簿</th><th>纸本标记</th><th class="r">笔数</th><th class="r">纸本合计</th><th class="r">录入合计</th><th class="r">差额</th><th></th></tr></thead><tbody>
+  ${pr.map(x => `<tr><td class="sm">${esc(x.b.name)}</td><td class="num">${x.m}</td><td class="r num">${x.n}</td><td class="r num">${x.paper == null ? '<span class="muted">未填</span>' : yuan(x.paper)}</td><td class="r num">${yuan(x.got)}</td><td class="r">${x.diff == null ? '<span class="muted">—</span>' : x.diff === 0 ? `<span class="pill repaid">${icon('check').replace('class="i"', 'class="i" style="width:14px;height:14px"')}对上了</span>` : `<span class="pill warn">${yuan(x.diff, true)}</span>`}</td><td class="r"><a class="btn text sm" href="#book-${x.b.id}" data-tab="records">查看</a></td></tr>`).join('')}
+  </tbody></table></div>`
+}
+function notesTable(rs) {
+  if (!rs.length) return '<div class="empty">纸本标注都已整理完</div>'
+  return `<div class="filters"><span class="sm muted">${rs.length} 条标注还没转为回礼。系统已按原文预填时间、事项与金额，逐条核对后转换。</span><div class="right"><button class="btn sm" data-act="annoAll">全部按预填转换</button></div></div>
+  <div class="tbl-wrap"><table class="tbl"><thead><tr><th>亲友</th><th>原记录</th><th>标注原文</th><th>预填的回礼</th><th></th></tr></thead><tbody>
+  ${rs.map(r => { const p = P(r.p), parsed = parseAnno(r.anno); return `<tr><td class="pend-bar"><span class="cell-2">${avatar(p)}<span class="t">${esc(p.name)}<small>${esc(B(r.b).name)} · ${r.page}</small></span></span></td><td>${money(r)}</td><td style="font-family:var(--serif)">${esc(r.anno)}</td><td class="sm">${parsed.map(x => `${fdate(x.date, x.prec)} · ${esc(x.ev)} · ${x.cat} <b class="amt out">${yuan(x.amt)}</b>`).join('<br>')}</td><td class="r"><button class="btn sm" data-act="anno" data-id="${r.id}">核对并转换</button></td></tr>` }).join('')}
+  </tbody></table></div>`
+}
+function contForm(b) {
+  const c = st.cont, got = c.rows.reduce((a, r) => a + r.amt, 0), tot = +c.total || 0
+  return `<div class="ctx">
+    <div class="field"><label>事项</label><select class="ipt" id="c-ev">${events.map(e => `<option value="${e.id}" ${e.id === (b.ev || c.ev) ? 'selected' : ''}>${esc(e.name)}</option>`).join('')}</select></div>
+    <div class="field"><label>日期</label><input class="ipt" id="c-date" type="date" value="${c.date}"></div>
+    <div class="field"><label>纸本标记</label><input class="ipt" id="c-page" value="${esc(c.page)}" style="width:90px"></div>
+    <div class="field"><label>本页合计</label><input class="ipt num" id="c-total" value="${esc(c.total)}" placeholder="选填" style="width:100px" inputmode="numeric"></div>
+    <div class="page-check">${tot ? (got === tot ? `<span class="pill repaid">本页对上了 ${yuan(got)}</span>` : `<span class="pill warn">已录 ${yuan(got)}，差 ${yuan(got - tot, true)}</span>`) : `<span class="muted">已录 ${c.rows.length} 笔 ${yuan(got)}</span>`}</div>
+  </div>
+  <form class="entry-row" id="c-form" autocomplete="off">
+    <input class="ipt" id="c-name" placeholder="姓名" list="dl-people" aria-label="姓名">
+    <input class="ipt num" id="c-amt" placeholder="金额" inputmode="numeric" aria-label="金额">
+    <select class="ipt" id="c-cat" aria-label="名目">${ITEM_CATS.map(x => `<option ${x === (b.cat === '火炮' ? '火炮' : '现金') ? 'selected' : ''}>${x}</option>`).join('')}</select>
+    <input class="ipt" id="c-anno" placeholder="纸本回礼标注原文（选填），如：11年国庆 孙女 100元" aria-label="标注原文">
+    <button class="btn primary" type="submit">记下 <kbd style="background:rgba(255,255,255,.18);color:#fff;border-color:transparent">Enter</kbd></button>
+  </form>
+  <datalist id="dl-people">${persons.map(p => `<option value="${esc(p.name)}">`).join('')}</datalist>
+  ${c.rows.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>#</th><th>姓名</th><th>名目</th><th class="r">金额</th><th>标注原文</th><th></th></tr></thead><tbody>${c.rows.map((r, i) => `<tr><td class="num muted">${c.rows.length - i}</td><td>${esc(r.name)}${r.isNew ? ' <span class="pill neutral">新亲友</span>' : ''}${r.dup ? ' <span class="pill pending">可能重复</span>' : ''}</td><td class="sm muted">${r.cat}</td><td class="r"><span class="amt in">${yuan(r.amt)}</span></td><td class="sm">${esc(r.anno) || '<span class="muted">—</span>'}</td><td class="r"><button class="btn text sm" data-act="cundo" data-i="${i}">撤销</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">输入姓名、金额，按 Enter 记下一笔；事项、日期、纸本标记保持不变，光标回到姓名。</div>'}`
+}
+
+PAGES['notes-todo'] = () => { const rs = live().filter(r => r.anno && !r.annoDone); return { title: '整理纸本标注', html: `<div class="page-head"><div><h1>整理纸本标注</h1><div class="meta">连续录入时抄下的回礼标注，逐条转为"送礼记录 + 关联原收礼"，原文原样保留</div></div></div><div class="card">${notesTable(rs)}</div>` } }
+PAGES.pages = () => ({ title: '按页核对', html: `<div class="page-head"><div><h1>按页核对</h1><div class="meta">每页纸本合计与录入合计对比；差额不为零说明漏录或金额录错</div></div></div><div class="card">${pagesTable(books.filter(b => !b.merged).flatMap(pageRows))}</div>` })
+
+PAGES.repay = () => {
+  const mine = st.repayView === 'mine'
+  const rs = live().filter(r => mine ? isOwe(r) : (r.dir === '送' && r.status === 'pending' && !r.repayOf.length))
+  const g = [...groupBy(rs, r => r.p)].map(([pid, l]) => ({ p: P(pid), l, v: l.reduce((a, r) => a + val(r), 0), old: l.map(r => r.date).sort()[0] })).sort((a, b) => a.old.localeCompare(b.old))
+  const total = g.reduce((a, x) => a + x.v, 0)
+  return {
+    title: '回礼清单', html: `
+    <div class="page-head"><div><h1>回礼清单</h1><div class="meta">按人合计，跨礼簿、跨名目；最久远的排在前面</div></div></div>
+    <div class="sec-head"><div class="seg" data-act="rview"><button data-v="mine" class="${mine ? 'on' : ''}">我该回的</button><button data-v="theirs" class="${mine ? '' : 'on'}">该回我的</button></div>
+      <span class="sub">${g.length} 人 · ${rs.length} 笔 · 合计 <b class="amt pend">${yuan(total)}</b></span></div>
+    <div class="card"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>亲友</th><th>明细</th><th class="r">合计</th><th>最早一笔</th><th></th></tr></thead><tbody>
+    ${g.map(x => `<tr><td class="pend-bar"><a class="cell-2" href="#person-${x.p.id}">${avatar(x.p)}<span class="t">${esc(x.p.name)}<small>${x.p.rel} · ${x.l.length} 笔</small></span></a></td>
+      <td class="sm">${x.l.map(r => `${seal(E(r.e)).replace('class="seal"', 'class="seal" style="width:20px;height:20px;font-size:12px;vertical-align:-5px;margin-right:4px"')}<span class="muted">${esc(E(r.e).name)} · ${esc(B(r.b).name)} · ${r.cat}</span> ${r.amt ? yuan(r.amt) : esc(r.gift)}`).join('<br>')}</td>
+      <td class="r"><span class="amt pend">${yuan(x.v)}</span></td><td class="sm">${ago(x.old)}<br><span class="muted">${fdate(x.old)}</span></td>
+      <td class="r">${mine ? `<button class="btn sm" data-act="repay" data-ids="${x.l.map(r => r.id).join(',')}">${icon('return')}回礼</button>` : `<button class="btn sm" data-act="markRepaid" data-ids="${x.l.map(r => r.id).join(',')}">标为对方已回</button>`}</td></tr>`).join('') || '<tr><td colspan="5"><div class="empty">都回清了</div></td></tr>'}
+    </tbody></table></div></div>`,
+  }
+}
+
+PAGES.stats = () => {
+  const y = st.statYear, rs = live().filter(r => !y || r.date.startsWith(y)), s = sum(rs)
+  const years = [...new Set(R.map(r => r.date.slice(0, 4)))].sort().reverse()
+  const split = key => { const m = groupBy(rs, key); return [...m].map(([k, l]) => ({ k, ...sum(l) })).sort((a, b) => b.in + b.out - a.in - a.out) }
+  const bars = (list, label) => { const mx = Math.max(1, ...list.map(x => Math.max(x.in, x.out))); return `<div class="bars">${list.map(x => `<div class="bar-row"><span>${label(x.k)}</span><div class="track"><i class="in" style="width:${x.in / mx * 100}%"></i><i class="out" style="width:${x.out / mx * 100}%"></i></div><div class="vals"><span class="amt in">${yuan(x.in)}</span><br><span class="amt out">${yuan(x.out)}</span></div></div>`).join('') || '<div class="empty">没有数据</div>'}</div>` }
+  const ppl = [...groupBy(rs, r => r.p)].map(([pid, l]) => ({ p: P(pid), ...sum(l), last: l.map(r => r.date).sort().pop() })).sort((a, b) => b.in + b.out - a.in - a.out).slice(0, 8)
+  return {
+    title: '统计', html: `
+    <div class="page-head"><div><h1>统计</h1><div class="meta">合计 = 现金 + 礼品估价；同一笔只计一次；跨类别合并的礼簿仍按每条记录的名目拆分</div></div>
+      <div class="tools"><div class="seg" data-act="syear">${years.map(v => `<button data-v="${v}" class="${y === v ? 'on' : ''}">${v} 年</button>`).join('')}<button data-v="" class="${!y ? 'on' : ''}">全部</button></div></div></div>
+    <div class="stats">
+      <div class="card stat"><div class="v" style="color:var(--c-in)">${yuan(s.in)}</div><div class="k">总收</div></div>
+      <div class="card stat"><div class="v" style="color:var(--c-out)">${yuan(s.out)}</div><div class="k">总送</div></div>
+      <div class="card stat"><div class="v">${yuan(s.in - s.out, true)}</div><div class="k">净差额</div></div>
+      <div class="card stat"><div class="v num">${s.n}</div><div class="k">记录数</div></div>
+      <div class="card stat"><div class="v num">${new Set(rs.map(r => r.p)).size}</div><div class="k">涉及人数</div></div>
+    </div>
+    ${y ? `<section class="section"><div class="sec-head"><h2>按月</h2><div class="tools legend"><span><i style="background:var(--c-in)"></i>收</span><span><i style="background:var(--c-out)"></i>送</span></div></div><div class="card chart" style="padding:var(--sp-4)">${monthChart(rs)}</div></section>` : ''}
+    <div class="grid-2e">
+      <section class="section"><div class="sec-head"><h2>按礼簿类别</h2><div class="tools legend"><span><i style="background:var(--c-in)"></i>收</span><span><i style="background:var(--c-out)"></i>送</span></div></div><div class="card">${bars(split(r => B(r.b).cat), k => k)}</div></section>
+      <section class="section"><div class="sec-head"><h2>按事项类型</h2></div><div class="card">${bars(split(r => E(r.e).type), k => k)}</div></section>
+    </div>
+    <section class="section"><div class="sec-head"><h2>往来最多的人</h2></div>
+      <div class="card"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>亲友</th><th class="r">总收</th><th class="r">总送</th><th class="r">净差额</th><th class="r">笔数</th><th>最近往来</th></tr></thead><tbody>
+      ${ppl.map(x => `<tr class="link" data-href="person-${x.p.id}"><td><span class="cell-2">${avatar(x.p)}<span class="t">${esc(x.p.name)}</span></span></td><td class="r"><span class="amt in">${yuan(x.in)}</span></td><td class="r"><span class="amt out">${yuan(x.out)}</span></td><td class="r amt">${yuan(x.in - x.out, true)}</td><td class="r num">${x.n}</td><td class="sm">${fdate(x.last)}</td></tr>`).join('')}
+      </tbody></table></div></div></section>`,
+  }
+}
+function monthChart(rs) {
+  const m = Array.from({ length: 12 }, () => ({ in: 0, out: 0 }))
+  rs.forEach(r => { const i = +r.date.slice(5, 7) - 1; m[i][r.dir === '收' ? 'in' : 'out'] += val(r) })
+  const mx = Math.max(...m.map(x => Math.max(x.in, x.out)), 1), step = mx > 4000 ? 2000 : mx > 2000 ? 1000 : 500, top = Math.ceil(mx / step) * step
+  const W = 960, H = 240, L = 56, Bt = 28, T = 12, cw = (W - L - 8) / 12, sc = v => (H - Bt - T) * v / top
+  let g = ''
+  for (let v = 0; v <= top; v += step) { const yy = H - Bt - sc(v); g += `<line x1="${L}" x2="${W - 8}" y1="${yy}" y2="${yy}" stroke="var(--c-divider)"/><text x="${L - 8}" y="${yy + 4}" text-anchor="end" font-size="11" fill="var(--c-ink-3)">${v ? (v >= 10000 ? v / 10000 + '万' : v.toLocaleString()) : 0}</text>` }
+  m.forEach((x, i) => {
+    const cx = L + cw * i + cw / 2
+    g += `<rect x="${cx - 13}" y="${H - Bt - sc(x.in)}" width="12" height="${sc(x.in)}" rx="3" fill="var(--c-in)"><title>${i + 1}月 收 ${yuan(x.in)}</title></rect>`
+    g += `<rect x="${cx + 1}" y="${H - Bt - sc(x.out)}" width="12" height="${sc(x.out)}" rx="3" fill="var(--c-out)"><title>${i + 1}月 送 ${yuan(x.out)}</title></rect>`
+    g += `<text x="${cx}" y="${H - 8}" text-anchor="middle" font-size="11" fill="var(--c-ink-3)">${i + 1}月</text>`
+  })
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="按月收送柱状图">${g}</svg>`
+}
+
+// 识别：示例照片已识别完，停在核对步骤
+function recogSample() {
+  return { step: 3, rot: 0, book: 1, ev: 1, date: '2025-10-02', page: 'p21-30', paperTotal: 1070, rows: [
+    { name: '张建国', up: '伍佰元', amt: 500, cat: '现金', anno: '', flags: ['dup'], ok: false },
+    { name: '王德明', up: '贰佰元', amt: 200, cat: '现金', anno: '', flags: [], ok: true },
+    { name: '刘桂兰', up: '壹佰元', amt: 100, cat: '现金', anno: '11年国庆 孙女 100元 火炮20元', flags: [], ok: true },
+    { name: '陈志强', up: '伍拾元', amt: 500, cat: '现金', anno: '', flags: ['mismatch'], ok: false },
+    { name: '孙丽娟', up: '壹佰元', amt: 100, cat: '现金', anno: '', flags: [], ok: true },
+    { name: '周海涛', up: '贰拾元', amt: 20, cat: '火炮', anno: '', flags: ['low'], ok: false },
+    { name: '郑小燕', up: '壹佰元', amt: 100, cat: '现金', anno: '已回', flags: [], ok: true },
+  ] }
+}
+const FLAG = { dup: '有 2 个同名', mismatch: '大小写不一致', low: '字迹不清' }
+PAGES.recognize = () => {
+  const g = st.recog || (st.recog = recogSample())
+  const steps = ['上传', '识别', '核对', '写入']
+  const stepper = `<div class="steps">${steps.map((t, i) => `${i ? '<span class="line"></span>' : ''}<span class="${i + 1 < g.step ? 'done' : i + 1 === g.step ? 'cur' : ''}"><i>${i + 1 < g.step ? icon('check').replace('class="i"', 'class="i" style="width:12px;height:12px;stroke-width:2.4"') : i + 1}</i>${t}</span>`).join('')}</div>`
+  if (g.step === 1) return { title: '识别礼簿', html: `<div class="page-head"><div><h1>识别礼簿</h1><div class="meta">一次一张：上传 → 识别 → 核对 → 写入。核对确认前不写入任何账目</div></div><div class="tools"><a class="btn" href="#recog-history" data-act="todo" data-msg="识别历史：每张原图与识别原始结果，可回看">识别历史</a></div></div>${stepper}
+    <label class="drop" id="drop">${icon('upload')}<b>把礼簿照片拖到这里，或点击选择</b><span class="sm muted">jpg / png，单张不超过 5MB；也可以直接粘贴截图。横拍的照片识别前可以旋转</span><input type="file" accept="image/png,image/jpeg" hidden id="file"></label>`, after: bindDrop }
+  if (g.step === 2) return { title: '识别礼簿', html: `<div class="page-head"><div><h1>识别礼簿</h1></div></div>${stepper}<div class="card empty" style="padding:80px"><b style="color:var(--c-ink-1)">正在识别第 21–30 页…</b><br>通常 20 到 60 秒。可以先去做别的，识别完会在侧栏提示。<br><br><button class="btn" data-act="rg-cancel">取消</button></div>` }
+  if (g.step === 4) return { title: '识别礼簿', html: `<div class="page-head"><div><h1>识别礼簿</h1></div></div>${stepper}<div class="card empty" style="padding:72px">${icon('check')}<br><b style="color:var(--c-ink-1);font-size:17px">已写入 ${g.written} 条到《${esc(B(g.book).name)}》</b><br>其中 ${g.annoN} 条带回礼标注，已一并生成送礼记录。<br><br><button class="btn primary" data-act="rg-next">识别下一张</button> <a class="btn" href="#book-${g.book}">去礼簿查看</a></div>` }
+  const flagged = g.rows.filter(r => r.flags.length && !r.ok).length, got = g.rows.reduce((a, r) => a + (+r.amt || 0), 0)
+  return {
+    title: '识别礼簿', html: `
+    <div class="page-head"><div><h1>识别礼簿</h1><div class="meta">核对第 21–30 页；改完勾选"确认"，标黄的行必须确认后才能写入</div></div><div class="tools">${stepper}</div></div>
+    <div class="card ctx" style="border:0">
+      <div class="field"><label>写入礼簿</label><select class="ipt" id="rg-book">${books.filter(b => !b.merged).map(b => `<option value="${b.id}" ${b.id === g.book ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></div>
+      <div class="field"><label>事项</label><select class="ipt">${events.map(e => `<option ${e.id === g.ev ? 'selected' : ''}>${esc(e.name)}</option>`).join('')}</select></div>
+      <div class="field"><label>日期</label><input class="ipt" type="date" value="${g.date}"></div>
+      <div class="field"><label>纸本标记</label><input class="ipt" value="${g.page}" style="width:90px"></div>
+      <div class="page-check">纸本合计 <b class="num">${yuan(g.paperTotal)}</b>${got === g.paperTotal ? '<span class="pill repaid">对上了</span>' : `<span class="pill warn">识别合计 ${yuan(got)}，差 ${yuan(got - g.paperTotal, true)}</span>`}</div>
+    </div>
+    <div class="rec">
+      <div class="card photo">
+        <div class="tools"><b style="flex:1">原图</b><button class="btn text sm" data-act="rg-rot">${icon('rotate')}旋转</button><button class="btn text sm" data-act="rg-new">${icon('upload')}换一张</button></div>
+        <div class="stage"><div class="ledger" style="transform:rotate(${g.rot - 1.2}deg)">
+          <span class="corner">(21-30)　1070元</span>
+          ${g.rows.map((r, i) => `<div class="col${st.recHi === i ? ' hl' : ''}" data-col="${i}"><span class="nm">${esc(r.name)}</span><span>贺礼</span><span>${esc(r.up)}</span>${r.anno ? `<span class="note">${esc(r.anno)}</span>` : ''}<span class="ar">${r.flags.includes('mismatch') ? 500 : r.amt}</span></div>`).join('')}
+        </div></div>
+        <div class="sm muted">鼠标停在右侧某行，左图对应一列会高亮。</div>
+      </div>
+      <div class="card">
+        <div class="tbl-wrap"><table class="tbl"><thead><tr><th>#</th><th>姓名</th><th>大写</th><th class="r">小写</th><th>名目</th><th>回礼标注</th><th>提示</th><th>确认</th><th></th></tr></thead><tbody>
+        ${g.rows.map((r, i) => `<tr class="${r.flags.length ? 'flag' : ''}${r.ok ? ' ok' : ''}" data-row="${i}"><td class="num muted">${i + 1}</td>
+          <td><input class="ipt" data-rg="name" data-i="${i}" value="${esc(r.name)}" style="min-width:72px"></td>
+          <td class="sm" style="font-family:var(--serif);white-space:nowrap">${esc(r.up)}</td>
+          <td><input class="ipt num" data-rg="amt" data-i="${i}" value="${r.amt}" style="text-align:right;min-width:64px"></td>
+          <td><select class="ipt" data-rg="cat" data-i="${i}" style="min-width:76px">${ITEM_CATS.map(c => `<option ${c === r.cat ? 'selected' : ''}>${c}</option>`).join('')}</select></td>
+          <td><input class="ipt" data-rg="anno" data-i="${i}" value="${esc(r.anno)}" placeholder="—" style="min-width:130px"></td>
+          <td><div class="flags">${r.flags.map(f => `<span class="pill ${r.ok ? 'none' : 'pending'}">${FLAG[f]}</span>`).join('')}${r.flags.includes('dup') ? `<select class="ipt" style="height:26px;font-size:12px;max-width:150px"><option>张建国 · 亲戚 · 大舅家表哥</option><option>新建同名亲友</option></select>` : ''}</div></td>
+          <td><input type="checkbox" class="chk" data-rg="ok" data-i="${i}" ${r.ok ? 'checked' : ''} aria-label="确认第 ${i + 1} 行"></td>
+          <td><button class="btn text sm" data-act="rg-del" data-i="${i}" aria-label="删除这一行">${icon('x')}</button></td></tr>`).join('')}
+        </tbody></table></div>
+        <div class="sumbar"><button class="btn sm" data-act="rg-add">${icon('plus')}添加一行</button><span>${g.rows.length} 行 · 识别合计 <b class="num">${yuan(got)}</b></span>
+          <div class="pager"><button class="btn" data-act="rg-redo">重新识别</button><button class="btn primary" data-act="rg-write">${flagged ? `还有 ${flagged} 行待确认` : `写入 ${g.rows.length} 条`}</button></div></div>
+      </div>
+    </div>`,
+    after() {
+      document.querySelectorAll('.rec tr[data-row]').forEach(tr => { tr.onmouseenter = () => hl(+tr.dataset.row); tr.onmouseleave = () => hl(-1) })
+    },
+  }
+}
+function hl(i) { st.recHi = i; document.querySelectorAll('.ledger .col').forEach(c => c.classList.toggle('hl', +c.dataset.col === i)) }
+function bindDrop() {
+  const d = $('#drop'), f = $('#file')
+  const done = () => { st.recog.step = 2; render(); setTimeout(() => { if (st.recog && st.recog.step === 2) { const s = recogSample(); s.rot = st.recog.rot; st.recog = s; if (route()[0] === 'recognize') render() } }, 1600) }
+  d.ondragover = e => { e.preventDefault(); d.classList.add('over') }
+  d.ondragleave = () => d.classList.remove('over')
+  d.ondrop = e => { e.preventDefault(); done() }
+  f.onchange = done
+  d.onclick = e => { if (e.target !== f) { e.preventDefault(); done() } }
+}
+
+PAGES.prefs = () => ({
+  title: '设置', html: `
+  <div class="page-head"><div><h1>设置</h1></div></div>
+  <div class="grid-2e">
+    <section class="section"><div class="sec-head"><h2>礼簿整理</h2></div><div class="card list">
+      <a class="row" href="#books" data-act="merge">${icon('merge')}<div class="grow">合并礼簿<small>把多本合成一本；跨类别合并时名目不变，统计仍按名目拆分</small></div>${icon('right')}</a>
+      <a class="row" href="#books">${icon('book')}<div class="grow">已合并的礼簿<small>${books.filter(b => b.merged).length} 本，可查看历史归属</small></div>${icon('right')}</a>
+      <a class="row" href="#notes-todo">${icon('note')}<div class="grow">整理纸本标注</div>${icon('right')}</a>
+      <a class="row" href="#pages">${icon('check')}<div class="grow">按页核对</div>${icon('right')}</a>
+    </div></section>
+    <section class="section"><div class="sec-head"><h2>导入导出</h2></div><div class="card" style="padding:var(--sp-4);display:flex;flex-direction:column;gap:var(--sp-3)">
+      <div class="field-row"><div class="field"><label>导出范围</label><select class="ipt"><option>全部记录</option><option>按礼簿</option><option>按事项</option><option>按亲友</option></select></div><div class="field"><label>格式</label><div class="seg"><button class="on">CSV</button><button>JSON</button></div></div></div>
+      <div style="display:flex;gap:var(--sp-2)"><button class="btn" data-act="todo" data-msg="导出 CSV（带 BOM，Excel 直接打开不乱码）">${icon('download')}导出</button><button class="btn" data-act="todo" data-msg="导入 CSV：先预览前 20 行与校验结果，确认后写入">${icon('upload')}导入 CSV</button></div>
+      <div class="field hint">CSV 带 BOM，Excel 直接打开不乱码。导入前先预览校验结果，确认后再写入。</div>
+    </div></section>
+    <section class="section"><div class="sec-head"><h2>名目与类别</h2></div><div class="card" style="padding:var(--sp-4);display:flex;flex-direction:column;gap:var(--sp-3)">
+      <div class="field"><label>礼簿类别</label><div style="display:flex;gap:6px;flex-wrap:wrap">${Object.keys(BOOK_CATS).map(catChip).join('')}<button class="btn text sm">${icon('plus')}自定义</button></div></div>
+      <div class="field"><label>名目</label><div style="display:flex;gap:6px;flex-wrap:wrap">${ITEM_CATS.map(c => `<span class="pill neutral">${c}</span>`).join('')}<button class="btn text sm">${icon('plus')}自定义</button></div></div>
+      <div class="field"><label>事项类型</label><div style="display:flex;gap:8px;flex-wrap:wrap">${Object.keys(TYPES).map(t => `<span class="cell-2">${seal({ type: t })}<span class="sm">${t}</span></span>`).join('')}</div></div>
+    </div></section>
+    <section class="section"><div class="sec-head"><h2>账号与登录设备</h2></div><div class="card">
+      <div class="tbl-wrap"><table class="tbl"><thead><tr><th>设备</th><th>最近使用</th><th></th></tr></thead><tbody>
+        <tr><td><span class="cell-2">${icon('device')}<span class="t">本机浏览器<small>开发免登录 · 当前</small></span></span></td><td class="sm">刚刚</td><td></td></tr>
+        <tr><td><span class="cell-2">${icon('device')}<span class="t">Chrome · macOS<small>访问令牌登录</small></span></span></td><td class="sm">3 天前</td><td class="r"><button class="btn text sm danger" data-act="todo" data-msg="下线后该设备需重新登录">下线</button></td></tr>
+      </tbody></table></div>
+      <div class="sumbar"><a class="btn sm" href="#login">查看登录页</a><span class="muted">本机开发免登录时不显示退出</span></div>
+    </div></section>
+  </div>`,
+})
+
+PAGES.login = () => ({
+  title: '登录', html: `
+  <div class="login">
+    <div class="art"><span class="stamp" style="width:48px;height:48px;border-radius:10px;background:rgba(255,255,255,.16);display:grid;place-items:center;font:600 26px/1 var(--serif)">礼</span>
+      <div><h1>人情往来，<br>一本账记清。</h1><p>把家里的纸质礼簿搬进电脑：按人、按事项聚合，谁送过、回没回，一眼看清。</p></div>
+      <span class="sm" style="color:var(--c-on-primary-2)">网页版 · 与小程序共用同一份账</span><span class="big">簿</span></div>
+    <div class="form"><div class="box">
+      <div class="devbar">${icon('info')}本机开发模式已免登录<a href="#home">直接进入</a></div>
+      <h2 style="margin:0;font-size:22px">登录</h2>
+      <div class="seg" id="lg-seg"><button class="on" data-v="qr">小程序扫码</button><button data-v="token">访问令牌</button></div>
+      <div id="lg-qr" style="display:flex;flex-direction:column;gap:var(--sp-3);text-align:center">${qr()}<span class="sm muted">用微信扫码，在小程序里点"确认登录"<br>二维码 2 分钟后过期，过期点一下刷新</span></div>
+      <div id="lg-token" hidden><div class="field"><label for="tk">访问令牌</label><textarea class="ipt" id="tk" rows="3" placeholder="粘贴 harmony token issue 签发的令牌"></textarea><span class="hint">令牌在服务器上用命令签发，默认 14 天有效，使用中会自动续期。</span></div><button class="btn primary" style="width:100%;margin-top:var(--sp-3)" data-act="todo" data-msg="校验令牌后进入工作台">登录</button></div>
+    </div></div>
+  </div>`,
+  after() { $('#lg-seg').onclick = e => { const b = e.target.closest('button'); if (!b) return; [...$('#lg-seg').children].forEach(x => x.classList.toggle('on', x === b)); $('#lg-qr').hidden = b.dataset.v !== 'qr'; $('#lg-token').hidden = b.dataset.v !== 'token' } },
+})
+function qr() {
+  let s = '', seed = 7; const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280
+  for (let y = 0; y < 25; y++) for (let x = 0; x < 25; x++) { const f = (x < 7 && y < 7) || (x > 17 && y < 7) || (x < 7 && y > 17); if (f) { const e = x % 18, g = y % 18, inn = e > 0 && e < 6 && g > 0 && g < 6, core = e > 1 && e < 5 && g > 1 && g < 5; if (!inn || core) s += `<rect x="${x}" y="${y}" width="1" height="1"/>` } else if (rnd() > .52) s += `<rect x="${x}" y="${y}" width="1" height="1"/>` }
+  return `<div class="qr"><svg viewBox="0 0 25 25" fill="var(--c-ink-1)" shape-rendering="crispEdges">${s}</svg></div>`
+}
+
+// ———————————————————— 抽屉：记一笔 ————————————————————
+const drawer = $('#drawer'), mask = $('#mask')
+function openDrawer(html, after) { drawer.innerHTML = html; drawer.classList.add('on'); mask.classList.add('on'); after && after() }
+function closeAll() { drawer.classList.remove('on'); $('#notes').classList.remove('on'); $('#dialog').classList.remove('on'); $('#palette').classList.remove('on'); mask.classList.remove('on') }
+
+function openEntry(pre = {}) {
+  const r = pre.rec, last = R[R.length - 1]
+  const v = { p: r ? P(r.p).name : pre.p ? P(pre.p).name : '', e: r ? r.e : pre.e || (pre.b ? B(pre.b).ev : 0) || last.e, b: r ? r.b : pre.b || last.b, dir: r ? r.dir : '收', cat: r ? r.cat : '', amt: r ? r.amt : '', gift: r ? r.gift : '', gv: r ? r.gv : '', date: r ? r.date : TODAY, status: r ? r.status : 'pending', note: r ? r.note : '' }
+  openDrawer(`
+    <div class="d-head"><h3>${r ? '编辑记录' : '记一笔'}</h3><button class="btn text" data-act="close" aria-label="关闭">${icon('x')}</button></div>
+    <form class="d-body" id="ef" autocomplete="off">
+      <div class="field"><label for="e-p">亲友</label><input class="ipt" id="e-p" list="dl-p2" value="${esc(v.p)}" placeholder="姓名或首字母，没有会新建"><datalist id="dl-p2">${persons.map(p => `<option value="${esc(p.name)}">${p.rel}${p.note ? ' · ' + esc(p.note) : ''}</option>`).join('')}</datalist><span class="hint" id="e-p-hint"></span></div>
+      <div class="field-row">
+        <div class="field"><label for="e-e">事项</label><select class="ipt" id="e-e">${events.map(e => `<option value="${e.id}" ${e.id === +v.e ? 'selected' : ''}>${esc(e.name)}</option>`).join('')}<option value="new">＋ 新建事项…</option></select></div>
+        <div class="field"><label for="e-b">礼簿</label><select class="ipt" id="e-b">${books.filter(b => !b.merged).map(b => `<option value="${b.id}" ${b.id === +v.b ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>方向</label><div class="seg dirseg" id="e-dir">${['收', '送'].map(d => `<button type="button" data-v="${d}" class="${v.dir === d ? 'on' : ''}">${d === '收' ? '收礼' : '送礼'}</button>`).join('')}</div></div>
+        <div class="field"><label for="e-cat">名目</label><select class="ipt" id="e-cat"><option value="">按礼簿推断</option>${ITEM_CATS.map(c => `<option ${c === v.cat ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
+      </div>
+      <div class="field"><label for="e-amt">金额</label><div class="amount-in"><input class="ipt" id="e-amt" inputmode="numeric" value="${v.amt}" placeholder="0"></div><div class="upper" id="e-up">${upper(+v.amt)}</div></div>
+      <div class="field-row">
+        <div class="field"><label for="e-gift">礼品（金额为 0 时必填）</label><input class="ipt" id="e-gift" value="${esc(v.gift)}" placeholder="如：被面一床"></div>
+        <div class="field"><label for="e-gv">礼品估价</label><input class="ipt num" id="e-gv" value="${v.gv || ''}" placeholder="选填，计入统计" inputmode="numeric"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label for="e-date">日期</label><input class="ipt" type="date" id="e-date" value="${v.date}"></div>
+        <div class="field"><label for="e-st">回礼状态</label><select class="ipt" id="e-st"></select></div>
+      </div>
+      <div class="field"><label for="e-note">备注</label><textarea class="ipt" id="e-note" rows="2">${esc(v.note)}</textarea></div>
+      <div id="e-warn"></div>
+    </form>
+    <div class="d-foot">${r ? `<div class="left"><button class="btn danger" data-act="del" data-id="${r.id}">${icon('trash')}删除</button></div>` : ''}<button class="btn" data-act="close">取消</button>${r ? '' : '<button class="btn" data-act="save" data-more="1">保存并再记一笔</button>'}<button class="btn primary" data-act="save" ${r ? `data-id="${r.id}"` : ''}>保存</button></div>`,
+  () => {
+    const f = $('#ef'), dir = () => $('#e-dir .on').dataset.v
+    const fillSt = () => { const keep = $('#e-st').value || v.status; $('#e-st').innerHTML = (dir() === '收' ? [['pending', '未回礼'], ['repaid', '已回礼'], ['none', '不用回']] : [['pending', '对方未回'], ['repaid', '对方已回'], ['none', '不用回']]).map(([k, t]) => `<option value="${k}" ${k === keep ? 'selected' : ''}>${t}</option>`).join('') }
+    const check = () => {
+      const name = $('#e-p').value.trim(), p = persons.find(x => x.name === name || x.py === name.toLowerCase())
+      $('#e-p-hint').innerHTML = !name ? '' : p ? `${p.rel}${p.note ? ' · ' + esc(p.note) : ''} · 已有 ${R.filter(x => x.p === p.id).length} 笔往来` : `<span style="color:var(--c-pending)">没有"${esc(name)}"，保存时新建亲友</span>`
+      const b = B($('#e-b').value), cat = $('#e-cat').value || (b.cat === '火炮' ? '火炮' : '现金')
+      const dup = p && !r && R.find(x => x.p === p.id && x.e === +$('#e-e').value && x.b === b.id && x.cat === cat)
+      $('#e-warn').innerHTML = dup ? `<div class="alert warn">${icon('alert')}<span>${esc(p.name)} 在《${esc(b.name)}》的这个事项下已有一笔${cat} ${yuan(dup.amt)}。如果是补录或分次给，照常保存即可。</span></div>` : ''
+    }
+    $('#e-dir').onclick = e => { const b = e.target.closest('button'); if (!b) return; [...$('#e-dir').children].forEach(x => x.classList.toggle('on', x === b)); fillSt() }
+    $('#e-amt').oninput = () => { $('#e-up').textContent = upper(+$('#e-amt').value || 0) }
+    $('#e-e').onchange = () => { if ($('#e-e').value === 'new') { toast('新建事项：在这里直接填名称、类型、日期，保存后回到记一笔'); $('#e-e').value = v.e } check() }
+    ;['#e-p', '#e-b', '#e-cat'].forEach(s => $(s).addEventListener('input', check))
+    f.onsubmit = e => { e.preventDefault(); saveEntry(r && r.id) }
+    fillSt(); check(); (r ? $('#e-amt') : $('#e-p')).focus()
+  })
+}
+function saveEntry(id, more) {
+  const name = $('#e-p').value.trim(), amt = +$('#e-amt').value || 0, gift = $('#e-gift').value.trim()
+  const err = !name ? '请填写亲友姓名' : (!amt && !gift) ? '金额与礼品至少填一项；金额为 0 时请填礼品名称' : amt < 0 ? '金额不能为负' : ''
+  if (err) { $('#e-warn').innerHTML = `<div class="alert err">${icon('alert')}<span>${err}</span></div>`; return }
+  let p = persons.find(x => x.name === name || x.py === name.toLowerCase())
+  if (!p) { p = { id: persons.length + 1, name, rel: '其他', py: '', phone: '', note: '' }; persons.push(p) }
+  const b = B($('#e-b').value), x = { p: p.id, e: +$('#e-e').value, b: b.id, dir: $('#e-dir .on').dataset.v, cat: $('#e-cat').value || (gift && !amt ? '实物礼品' : b.cat === '火炮' ? '火炮' : '现金'), amt, gift, gv: +$('#e-gv').value || 0, date: $('#e-date').value, status: $('#e-st').value, note: $('#e-note').value }
+  if (id) Object.assign(byId(R, id), x); else add(x.p, x.e, x.b, x.dir, x.amt, x.date, x.status, x)
+  toast(id ? '已保存修改' : `已记下：${p.name} ${x.dir} ${amt ? yuan(amt) : gift}`)
+  if (more) { render(); openEntry({ e: x.e, b: x.b }) } else { closeAll(); render() }
+}
+
+// ———————————————————— 抽屉：记录详情 ————————————————————
+function openRecord(id) {
+  const r = byId(R, id), p = P(r.p), e = E(r.e), b = B(r.b)
+  const backs = R.filter(x => x.repayOf.includes(r.id)), origs = r.repayOf.map(i => byId(R, i))
+  const link = x => `<a href="#person-${x.p}" data-rec2="${x.id}">${dirTag(x)}<div style="flex:1" class="sm">${esc(E(x.e).name)} · ${esc(B(x.b).name)} · ${x.cat}<br><span class="muted">${fdate(x.date)}</span></div>${money(x)}</a>`
+  openDrawer(`
+    <div class="d-head"><h3>记录详情</h3><button class="btn text" data-act="close" aria-label="关闭">${icon('x')}</button></div>
+    <div class="d-body">
+      <div class="profile">${avatar(p)}<div style="flex:1"><a href="#person-${p.id}"><b style="font-size:17px">${esc(p.name)}</b></a><div class="sm muted">${p.rel}</div></div><div style="text-align:right">${dirTag(r)} <span style="font-size:22px">${money(r)}</span><div style="margin-top:4px">${pill(r)}</div></div></div>
+      <dl class="dl">
+        <dt>事项</dt><dd><a class="cell-2" href="#event-${e.id}">${seal(e)}${esc(e.name)}</a></dd>
+        <dt>礼簿</dt><dd><a href="#book-${b.id}">${esc(b.name)}</a> ${catChip(b.cat)}</dd>
+        <dt>名目</dt><dd>${r.cat}${r.gift ? ` · ${esc(r.gift)}${r.gv ? `（估 ${yuan(r.gv)}）` : ''}` : ''}</dd>
+        <dt>大写</dt><dd style="font-family:var(--serif)">${r.amt ? upper(r.amt) : '—'}</dd>
+        <dt>日期</dt><dd>${fdate(r.date)}</dd>
+        ${r.page ? `<dt>纸本</dt><dd>${esc(r.page)}</dd>` : ''}
+        ${r.anno ? `<dt>纸本标注</dt><dd style="font-family:var(--serif)">${esc(r.anno)} ${r.annoDone ? '<span class="pill repaid">已整理</span>' : '<span class="pill pending">待整理</span>'}</dd>` : ''}
+        ${r.note ? `<dt>备注</dt><dd>${esc(r.note)}</dd>` : ''}
+      </dl>
+      ${origs.length ? `<div class="field"><label>这笔回礼回的是</label><div class="chain">${origs.map(link).join('')}</div></div>` : ''}
+      ${backs.length ? `<div class="field"><label>回礼记录</label><div class="chain">${backs.map(link).join('')}</div></div>` : ''}
+    </div>
+    <div class="d-foot"><div class="left"><button class="btn danger" data-act="del" data-id="${r.id}">${icon('trash')}删除</button></div>
+      ${isOwe(r) ? `<button class="btn" data-act="markNone" data-id="${r.id}">标为不用回</button>${r.anno && !r.annoDone ? `<button class="btn" data-act="anno" data-id="${r.id}">补录纸本回礼</button>` : ''}<button class="btn" data-act="repay" data-ids="${r.id}">${icon('return')}回礼</button>` : ''}
+      ${r.dir === '送' && r.status === 'pending' && !r.repayOf.length ? `<button class="btn" data-act="markRepaid" data-ids="${r.id}">标为对方已回</button>` : ''}
+      <button class="btn primary" data-act="edit" data-id="${r.id}">${icon('edit')}编辑</button></div>`)
+}
+
+// ———————————————————— 抽屉：回礼 ————————————————————
+function openRepay(ids) {
+  const os = ids.map(i => byId(R, i)), p = P(os[0].p), total = os.reduce((a, r) => a + val(r), 0)
+  openDrawer(`
+    <div class="d-head"><h3>回礼给 ${esc(p.name)}</h3><button class="btn text" data-act="close" aria-label="关闭">${icon('x')}</button></div>
+    <div class="d-body">
+      <div class="field"><label>回的是这 ${os.length} 笔（可跨礼簿、跨名目）</label><div class="chain">${os.map(x => `<a>${dirTag(x)}<div style="flex:1" class="sm">${esc(E(x.e).name)} · ${esc(B(x.b).name)} · ${x.cat}<br><span class="muted">${fdate(x.date)}</span></div>${money(x)}</a>`).join('')}</div><span class="hint">当年收了 ${yuan(total)}。保存后这几笔改为"已回礼"，原记录不改动。</span></div>
+      <div class="field"><label for="rp-e">对方的事项</label><select class="ipt" id="rp-e">${events.filter(e => e.host === '别人家办').map(e => `<option value="${e.id}">${esc(e.name)}</option>`).join('')}<option value="new">＋ 新建：${esc(p.name)}家的事…</option></select></div>
+      <div class="field"><label for="rp-amt">回礼金额</label><div class="amount-in"><input class="ipt" id="rp-amt" inputmode="numeric" value="${total}"></div><div class="upper" id="rp-up">${upper(total)}</div></div>
+      <div class="field-row"><div class="field"><label for="rp-cat">名目</label><select class="ipt" id="rp-cat">${ITEM_CATS.map(c => `<option>${c}</option>`).join('')}</select></div><div class="field"><label for="rp-d">日期</label><input class="ipt" type="date" id="rp-d" value="${TODAY}"></div></div>
+      <div class="alert info">${icon('info')}<span>回礼会新增一条"送礼"记录，记在《日常往来》，状态显示为"回礼"，可以跳回原收礼记录。</span></div>
+    </div>
+    <div class="d-foot"><button class="btn" data-act="close">取消</button><button class="btn primary" data-act="repaySave" data-ids="${ids.join(',')}">保存回礼</button></div>`,
+  () => { $('#rp-amt').oninput = () => { $('#rp-up').textContent = upper(+$('#rp-amt').value || 0) } })
+}
+
+// ———————————————————— 抽屉：补录纸本回礼 ————————————————————
+function parseAnno(s) {
+  if (!s || s === '已回') return []
+  const lines = s.split(/\n/)
+  return lines.flatMap(line => {
+    const yy = (line.match(/(\d{2})年/) || [])[1], mo = line.includes('正月') ? 1 : line.includes('国庆') ? 10 : +((line.match(/(\d{1,2})月/) || [])[1] || 0), dd = +((line.match(/(\d{1,2})日/) || [])[1] || 0)
+    const y = yy ? 2000 + +yy : 2011, prec = dd ? 'day' : mo ? 'month' : 'year'
+    const date = `${y}-${String(mo || 1).padStart(2, '0')}-${String(dd || 1).padStart(2, '0')}`
+    const ev = ((line.replace(/\d{2}年|\d{1,2}月|\d{1,2}日|正月|国庆|火炮\s*\d+元?|\d+元?/g, ' ').trim().split(/\s+/)[0]) || '纸本未注明事项')
+    const items = [], pao = line.match(/火炮\s*(\d+)/)
+    const rest = line.replace(/火炮\s*\d+元?/, '').replace(/\d{2}年|\d{1,2}月|\d{1,2}日/g, '')
+    const cash = rest.match(/(\d+)\s*元?/)
+    if (cash) items.push({ cat: '现金', amt: +cash[1] })
+    if (pao) items.push({ cat: '火炮', amt: +pao[1] })
+    return items.map(it => ({ date, prec, ev, ...it }))
+  })
+}
+function openAnno(id) {
+  const r = byId(R, id), p = P(r.p), items = parseAnno(r.anno)
+  openDrawer(`
+    <div class="d-head"><h3>补录纸本回礼 · ${esc(p.name)}</h3><button class="btn text" data-act="close" aria-label="关闭">${icon('x')}</button></div>
+    <div class="d-body">
+      <div class="field"><label>原收礼</label><div class="chain"><a>${dirTag(r)}<div style="flex:1" class="sm">${esc(E(r.e).name)} · ${esc(B(r.b).name)} · ${r.page}<br><span class="muted">${fdate(r.date)}</span></div>${money(r)}</a></div></div>
+      <div class="field"><label>标注原文（原样保留，不随下面修改）</label><div style="padding:var(--sp-3);border-radius:var(--r-s);background:var(--c-paper);font-family:var(--serif);font-size:16px">${esc(r.anno)}</div></div>
+      <div class="field"><label>解析出的回礼（${items.length} 条送礼记录，可改）</label>
+        <div class="tbl-wrap"><table class="tbl"><thead><tr><th>时间</th><th>精度</th><th>对方事项</th><th>名目</th><th class="r">金额</th></tr></thead><tbody>
+        ${items.map(x => `<tr><td><input class="ipt" type="date" value="${x.date}" style="width:140px"></td><td><select class="ipt" style="width:70px">${[['day', '日'], ['month', '月'], ['year', '年']].map(([k, t]) => `<option ${k === x.prec ? 'selected' : ''}>${t}</option>`).join('')}</select></td><td><input class="ipt" value="${esc(x.ev)}" style="width:110px"></td><td class="sm">${x.cat}</td><td class="r"><span class="amt out">${yuan(x.amt)}</span></td></tr>`).join('')}
+        </tbody></table></div>
+        <span class="hint">时间只到月或年时按当月 / 当年第一天存，界面显示"约"。对方事项写名称即可，没有会自动新建；没写事项的归入"纸本未注明事项"。</span></div>
+    </div>
+    <div class="d-foot"><button class="btn" data-act="close">取消</button><button class="btn primary" data-act="annoSave" data-id="${r.id}">生成 ${items.length} 条回礼</button></div>`)
+}
+function convertAnno(r) {
+  parseAnno(r.anno).forEach(x => { let e = events.find(v => v.name === x.ev); if (!e) { e = { id: events.length + 1, name: x.ev, type: '其他', date: x.date, host: '别人家办', place: '' }; events.push(e) } add(r.p, e.id, 5, '送', x.amt, x.date, 'none', { cat: x.cat, repayOf: [r.id] }) })
+  r.annoDone = true; r.status = 'repaid'
+}
+
+// ———————————————————— 对话框：合并 / 删除 ————————————————————
+function openDialog(html) { $('#dialog').innerHTML = html; $('#dialog').classList.add('on'); mask.classList.add('on') }
+function openMerge(src) {
+  const act = books.filter(b => !b.merged)
+  openDialog(`<div class="d-head"><h3>合并礼簿</h3></div><div class="d-body">
+    <div class="field"><label>把这些礼簿</label><div style="display:flex;flex-direction:column;gap:6px">${act.map(b => `<label class="cell-2"><input type="checkbox" class="chk" name="msrc" value="${b.id}" ${b.id === +src ? 'checked' : ''}>${esc(b.name)} ${catChip(b.cat)}</label>`).join('')}</div></div>
+    <div class="field"><label for="mdst">合并到</label><select class="ipt" id="mdst">${act.map(b => `<option value="${b.id}" ${b.id === 1 && +src !== 1 ? 'selected' : ''}>${esc(b.name)}（${b.cat}）</option>`).join('')}</select></div>
+    <div id="mwarn"></div></div>
+    <div class="d-foot"><button class="btn" data-act="close">取消</button><button class="btn primary" data-act="mergeDo">确认合并</button></div>`)
+  const upd = () => { const ids = [...document.querySelectorAll('[name=msrc]:checked')].map(i => +i.value), d = B($('#mdst').value), cross = ids.some(i => B(i).cat !== d.cat), n = R.filter(r => ids.includes(r.b)).length
+    $('#mwarn').innerHTML = !ids.length ? '' : ids.includes(d.id) ? `<div class="alert err">${icon('alert')}<span>目标礼簿不能同时是源礼簿</span></div>` : `<div class="alert ${cross ? 'warn' : 'info'}">${icon(cross ? 'alert' : 'info')}<span>${n} 条记录将归到《${esc(d.name)}》，源礼簿标为"已合并"并保留原礼簿信息。${cross ? '<br><b>跨类别合并：</b>记录的名目不变（火炮仍是火炮），统计继续按名目拆分。' : ''}</span></div>` }
+  $('#dialog').onchange = upd; upd()
+}
+function confirmDelete(id) {
+  const r = byId(R, id), refs = R.filter(x => x.repayOf.includes(id))
+  openDialog(`<div class="d-head"><h3>删除这条记录？</h3></div><div class="d-body">${refs.length ? `<div class="alert err">${icon('alert')}<span>这笔已被 ${refs.length} 条回礼关联，不能直接删除。先在回礼记录里解除关联，再删除。</span></div>` : `<p style="margin:0;color:var(--c-ink-2)">${esc(P(r.p).name)} 在《${esc(B(r.b).name)}》的 ${r.amt ? yuan(r.amt) : esc(r.gift)} 将被删除，统计随之变化。此操作不能撤销。</p>`}</div>
+    <div class="d-foot"><button class="btn" data-act="close">${refs.length ? '知道了' : '取消'}</button>${refs.length ? '' : `<button class="btn primary" style="background:var(--c-danger);border-color:var(--c-danger)" data-act="delDo" data-id="${id}">删除</button>`}</div>`)
+}
+
+// ———————————————————— 全局搜索 ————————————————————
+function search(q) {
+  q = q.trim(); const out = { 亲友: [], 事项: [], 礼簿: [], 记录: [] }
+  if (!q) return out
+  const lc = q.toLowerCase(), cn = { 壹: 1, 贰: 2, 叁: 3, 肆: 4, 伍: 5, 陆: 6, 柒: 7, 捌: 8, 玖: 9 }
+  let m
+  const rs = live()
+  if ((m = q.match(/^(\d+)\s*-\s*(\d+)$/))) out.记录 = rs.filter(r => r.amt >= +m[1] && r.amt <= +m[2])
+  else if ((m = q.match(/^(19|20)\d{2}$/))) out.记录 = rs.filter(r => r.date.startsWith(q))
+  else if ((m = q.match(/^(\d{2})年$/))) out.记录 = rs.filter(r => r.date.startsWith('20' + m[1]))
+  else if (/^\d+$/.test(q)) out.记录 = rs.filter(r => r.amt === +q)
+  else if (/^p\d/i.test(q)) out.记录 = rs.filter(r => r.page.toLowerCase().startsWith(lc))
+  else if ((m = q.match(/^([壹贰叁肆伍陆柒捌玖])([仟佰拾])/))) { const n = cn[m[1]] * { 仟: 1000, 佰: 100, 拾: 10 }[m[2]]; out.记录 = rs.filter(r => r.amt === n) }
+  else {
+    out.亲友 = persons.filter(p => p.name.includes(q) || p.py.startsWith(lc))
+    out.事项 = events.filter(e => e.name.includes(q))
+    out.礼簿 = books.filter(b => b.name.includes(q))
+    out.记录 = rs.filter(r => r.note.includes(q) || r.gift.includes(q) || r.anno.includes(q))
+  }
+  out.记录 = out.记录.slice(0, 8)
+  return out
+}
+function renderSearch() {
+  const q = $('#pq').value, res = search(q)
+  const any = Object.values(res).some(l => l.length)
+  const tips = ['zjg', '500', '500-1000', '伍佰', '2011', '11年', 'p1-10', '火炮']
+  $('#pres').innerHTML = !q.trim() ? `<div class="tips">试试：${tips.map(t => `<button data-tip="${t}">${t}</button>`).join('')}</div>` : !any ? '<div class="empty">没有找到。金额、年份、页码也能搜</div>' : Object.entries(res).filter(([, l]) => l.length).map(([k, l]) => `<h6>${k}</h6>` + l.map(x => {
+    if (k === '亲友') return `<a href="#person-${x.id}">${avatar(x)}<span class="grow">${esc(x.name)} <small>${x.rel} · ${x.py}</small></span></a>`
+    if (k === '事项') return `<a href="#event-${x.id}">${seal(x)}<span class="grow">${esc(x.name)} <small>${fdate(x.date)}</small></span></a>`
+    if (k === '礼簿') return `<a href="#book-${x.id}">${icon('book')}<span class="grow">${esc(x.name)} <small>${x.cat}${x.merged ? ' · 已合并' : ''}</small></span></a>`
+    return `<a href="#records" data-rec="${x.id}">${dirTag(x)}<span class="grow">${esc(P(x.p).name)} · ${esc(E(x.e).name)} <small>${esc(B(x.b).name)}${x.page ? ' · ' + x.page : ''} · ${fdate(x.date)}</small></span>${money(x)}</a>`
+  }).join('')).join('')
+}
+function openSearch() { $('#palette').classList.add('on'); mask.classList.add('on'); const i = $('#pq'); i.value = ''; renderSearch(); setTimeout(() => i.focus(), 30) }
+$('#pq').oninput = renderSearch
+
+// ———————————————————— 交互说明 ————————————————————
+const NOTES = {
+  home: ['<b>朱砂卡</b>只显示当年收、送、净差额；下方胶囊是全部未回礼，点进回礼清单。', '右侧四个快捷入口：记一笔（快捷键 N）、连续录入（进入上次用的礼簿）、识别礼簿、导入导出。', '<b>最近记录</b>点行打开右侧详情抽屉，不离开当前页；点姓名进亲友详情。', '<b>最久没回的</b>按最早一笔排序，金额用琥珀色。'],
+  records: ['筛选从左到右按主维度排列：礼簿类别 → 事项类型 → 亲友 → 时间；竖线后是辅助条件：方向、回礼状态、名目。', '只选回礼状态、不选方向时，按收礼记录处理，不混入送礼。状态下拉的文字随方向变化。', '底部汇总条随筛选实时变化：笔数、收、送、其中未回礼。', '点行打开详情抽屉：可编辑、回礼、标为不用回、删除；被回礼关联的记录删除时会被拦下。'],
+  people: ['搜索支持姓名与拼音首字母（如 zjg）。', '有未回礼的人，行首有琥珀色竖条。', '点行进入亲友详情。'],
+  person: ['顶部四个数：总收、总送、净差额、未回礼。', '时间线按事项分组，每组合计跨礼簿、跨名目的金额（如婚宴：人情礼 + 火炮）。', '<b>回礼：</b>勾选一笔或多笔未回礼的收礼记录，顶部"回礼"按钮亮起，打开回礼抽屉；可一次回多笔。', '"给 X 记一笔"会预填亲友。'],
+  events: ['按日期倒序。自家办的看收了多少，别人家办的看送了多少。'],
+  event: ['分段：谁来了 / 我回了 / 还有谁没回，都是按人合计，明细列出分礼簿、分名目。', '"在此事项记一笔"预填事项。'],
+  books: ['已合并的礼簿单独列在下方，只读；点开能看到并入了哪本。', '合并礼簿是对话框，跨类别时会额外提醒名目不变。'],
+  book: ['四个 tab：记录、连续录入、按页核对、整理纸本标注。', '<b>连续录入：</b>顶部固定事项、日期、纸本标记、本页合计；下方一行输入姓名、金额、名目、标注原文，Enter 记下，光标回到姓名；右上实时对比本页合计。', '同一人 + 同一事项 + 同一礼簿 + 同一名目重复时，行内标"可能重复"，不阻断。', '按页核对：差额不为零标红。整理纸本标注：系统按原文预填，逐条核对后生成回礼。'],
+  'notes-todo': ['列出抄了标注但还没转为回礼的收礼记录。', '"核对并转换"打开抽屉：原文原样保留，解析结果可改；一条标注可拆成多条送礼记录（如现金 100 + 火炮 20）。', '"全部按预填转换"适合标注规整的情况。'],
+  pages: ['跨全部礼簿列出每个纸本标记的纸本合计、录入合计与差额。'],
+  repay: ['分段：我该回的 / 该回我的。按人合计，最久远的在前。', '"回礼"打开回礼抽屉，把这个人的全部未回礼带进去，可以删减。', '"该回我的"只算主动送礼，不含回礼生成的送礼。'],
+  stats: ['年份切换在右上；选"全部"时隐藏按月图。', '按礼簿类别、事项类型拆分，收送两条柱同一刻度。', '口径：合计 = 现金 + 礼品估价，同一笔只计一次。'],
+  recognize: ['一次一张：上传 → 识别 → 核对 → 写入。示例停在核对步骤；点"换一张"看上传状态（支持拖放、粘贴）。', '左原图右表格，鼠标停在某行，原图对应一列高亮；原图可旋转。', '标黄的行（同名、大小写不一致、字迹不清）必须勾选确认，否则写入按钮显示"还有 N 行待确认"。', '顶部对比纸本合计与识别合计；改金额后实时更新。', '回礼标注随收礼一并写入，生成送礼记录。'],
+  prefs: ['礼簿整理、导入导出、名目与类别、登录设备集中在这里。'],
+  login: ['本机开发免登录时顶部提示可直接进入。', '线上登录：小程序扫码（二维码 2 分钟过期）或访问令牌。小程序上线前，网页只能用访问令牌登录。'],
+}
+function openNotes() {
+  const [name] = route(), list = NOTES[name] || NOTES.home
+  $('#notes').innerHTML = `<div class="d-head"><h3>交互说明</h3><button class="btn text" data-act="close" aria-label="关闭">${icon('x')}</button></div>
+  <div class="d-body"><ol>${list.map(x => `<li>${x}</li>`).join('')}</ol>
+  <div class="field" style="margin-top:var(--sp-4)"><label>全局快捷键</label><div class="kbds"><kbd>⌘K</kbd><span>全局搜索（也可按 /）</span><kbd>N</kbd><span>记一笔</span><kbd>Esc</kbd><span>关闭抽屉、对话框</span><kbd>Enter</kbd><span>连续录入时记下一笔</span></div></div>
+  <div class="alert info" style="margin-top:var(--sp-4)">${icon('info')}<span>原型数据只在内存里，刷新恢复。所有保存、合并、回礼都会真实改动页面上的数字。</span></div></div>`
+  $('#notes').classList.add('on')
+}
+
+// ———————————————————— 事件 ————————————————————
+let toastT
+function toast(t) { const el = $('#toast'); el.innerHTML = icon('check') + esc(t); el.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('on'), 2400) }
+
+document.addEventListener('click', e => {
+  const tip = e.target.closest('[data-tip]'); if (tip) { $('#pq').value = tip.dataset.tip; renderSearch(); return }
+  if (e.target.closest('#palette a')) { const a = e.target.closest('#palette a'); closeAll(); if (a.dataset.rec) { e.preventDefault(); location.hash = 'records'; setTimeout(() => openRecord(+a.dataset.rec), 50) } return }
+  const t = e.target.closest('[data-act]')
+  if (t && !t.disabled) {
+    const a = t.dataset.act, ids = (t.dataset.ids || '').split(',').filter(Boolean).map(Number)
+    switch (a) {
+      case 'close': closeAll(); return
+      case 'search': openSearch(); return
+      case 'notes': closeAll(); openNotes(); mask.classList.add('on'); return
+      case 'entry': openEntry({ p: +t.dataset.p || 0, e: +t.dataset.e || 0, b: +t.dataset.b || 0 }); return
+      case 'edit': openEntry({ rec: byId(R, +t.dataset.id) }); return
+      case 'save': saveEntry(+t.dataset.id || 0, t.dataset.more); return
+      case 'del': closeAll(); confirmDelete(+t.dataset.id); return
+      case 'delDo': R.splice(R.findIndex(r => r.id === +t.dataset.id), 1); closeAll(); render(); toast('已删除'); return
+      case 'repay': closeAll(); openRepay(ids.length ? ids : [...st.selOwe]); return
+      case 'repaySave': { const os = ids.map(i => byId(R, i)), amt = +$('#rp-amt').value || 0; let ev = $('#rp-e').value; if (ev === 'new') { events.push({ id: events.length + 1, name: P(os[0].p).name + '家的事', type: '其他', date: $('#rp-d').value, host: '别人家办', place: '' }); ev = events.length } add(os[0].p, +ev, 5, '送', amt, $('#rp-d').value, 'none', { cat: $('#rp-cat').value, repayOf: ids }); os.forEach(r => { r.status = 'repaid'; st.selOwe.delete(r.id) }); closeAll(); render(); toast(`已回礼 ${yuan(amt)}，${os.length} 笔改为已回礼`); return }
+      case 'markNone': byId(R, +t.dataset.id).status = 'none'; closeAll(); render(); toast('已标为不用回'); return
+      case 'markRepaid': ids.forEach(i => byId(R, i).status = 'repaid'); closeAll(); render(); toast('已标为对方已回'); return
+      case 'anno': closeAll(); openAnno(+t.dataset.id); return
+      case 'annoSave': convertAnno(byId(R, +t.dataset.id)); closeAll(); render(); toast('已生成回礼并关联原收礼'); return
+      case 'annoAll': { const l = live().filter(r => r.anno && !r.annoDone && r.anno !== '已回'); l.forEach(convertAnno); render(); toast(`已转换 ${l.length} 条标注`); return }
+      case 'merge': e.preventDefault(); openMerge(t.dataset.src); return
+      case 'mergeDo': { const src = [...document.querySelectorAll('[name=msrc]:checked')].map(i => +i.value), d = +$('#mdst').value; if (!src.length || src.includes(d)) return; src.forEach(i => { B(i).merged = d; R.filter(r => r.b === i).forEach(r => { r.note = r.note || `原记在《${B(i).name}》`; r.b = d }) }); closeAll(); render(); toast(`已合并 ${src.length} 本到《${B(d).name}》`); return }
+      case 'clearF': Object.keys(st[t.dataset.scope]).forEach(k => st[t.dataset.scope][k] = ''); render(); return
+      case 'pg': st.recPage += +t.dataset.d; render(); return
+      case 'btab': st.bookTab = t.dataset.v; render(); return
+      case 'cundo': st.cont.rows.splice(+t.dataset.i, 1); render(); return
+      case 'todo': e.preventDefault(); toast(t.dataset.msg); return
+      case 'newPerson': toast('新建亲友：姓名必填；同名时提示"已存在同名，是否仍要新建"'); return
+      case 'editPerson': toast('编辑亲友：姓名、关系、电话、备注；有记录时不能删除'); return
+      case 'rg-rot': st.recog.rot = (st.recog.rot + 90) % 360; render(); return
+      case 'rg-new': st.recog.step = 1; render(); return
+      case 'rg-cancel': st.recog.step = 1; render(); return
+      case 'rg-redo': st.recog.step = 2; render(); setTimeout(() => { st.recog = recogSample(); render() }, 1400); return
+      case 'rg-add': st.recog.rows.push({ name: '', up: '', amt: '', cat: '现金', anno: '', flags: [], ok: true }); render(); return
+      case 'rg-del': st.recog.rows.splice(+t.dataset.i, 1); render(); return
+      case 'rg-next': st.recog = recogSample(); st.recog.step = 1; render(); return
+      case 'rg-write': {
+        const g = st.recog, bad = g.rows.filter(r => r.flags.length && !r.ok), empty = g.rows.filter(r => !r.name.trim() || !(+r.amt))
+        if (bad.length) { toast(`第 ${bad.map(r => g.rows.indexOf(r) + 1).join('、')} 行还没确认`); return }
+        if (empty.length) { toast('有行缺姓名或金额，补上或删掉这一行'); return }
+        g.book = +$('#rg-book').value
+        g.rows.forEach(r => { let p = persons.find(x => x.name === r.name.trim()); if (!p) { p = { id: persons.length + 1, name: r.name.trim(), rel: '其他', py: '', phone: '', note: '' }; persons.push(p) } add(p.id, g.ev, g.book, '收', +r.amt, g.date, r.anno === '已回' ? 'repaid' : 'pending', { cat: r.cat, page: g.page, anno: r.anno }); const nr = R[R.length - 1]; if (r.anno && r.anno !== '已回') convertAnno(nr); if (r.anno === '已回') nr.annoDone = true })
+        g.written = g.rows.length; g.annoN = g.rows.filter(r => r.anno).length; g.step = 4; render(); return
+      }
+    }
+  }
+  const rv = e.target.closest('[data-act="rel"] button'); if (rv) { st.peopleRel = rv.dataset.v; render(); return }
+  const ev = e.target.closest('[data-act="eview"] button'); if (ev) { st.eventView = ev.dataset.v; render(); return }
+  const rw = e.target.closest('[data-act="rview"] button'); if (rw) { st.repayView = rw.dataset.v; render(); return }
+  const sy = e.target.closest('[data-act="syear"] button'); if (sy) { st.statYear = sy.dataset.v; render(); return }
+  const fd = e.target.closest('.filters [data-f="dir"] button'); if (fd) { const s = st[fd.closest('.filters').dataset.scope]; s.dir = fd.dataset.v; st.recPage = 1; render(); return }
+  const tab = e.target.closest('[data-tab]'); if (tab) { st.nextTab = tab.dataset.tab; if (location.hash === tab.getAttribute('href')) { st.bookTab = st.nextTab; st.nextTab = ''; render() } }
+  if (e.target.closest('[data-stop], .chk, a, button, input, select')) return
+  const hr = e.target.closest('[data-href]'); if (hr) { go(hr.dataset.href); return }
+  const rc = e.target.closest('tr[data-rec]'); if (rc) { st.recSel = +rc.dataset.rec; document.querySelectorAll('tr.sel').forEach(x => x.classList.remove('sel')); rc.classList.add('sel'); openRecord(+rc.dataset.rec) }
+})
+document.addEventListener('change', e => {
+  const f = e.target.closest('.filters [data-f]'); if (f && f.tagName === 'SELECT') { st[f.closest('.filters').dataset.scope][f.dataset.f] = f.value; st.recPage = 1; render(); return }
+  if (e.target.matches('.chk[data-owe]')) { const id = +e.target.dataset.owe; e.target.checked ? st.selOwe.add(id) : st.selOwe.delete(id); render(); return }
+  const rg = e.target.dataset.rg; if (rg) { const row = st.recog.rows[+e.target.dataset.i]; if (rg === 'ok') row.ok = e.target.checked; else if (rg === 'cat') row.cat = e.target.value; render() }
+  if (e.target.id === 'c-total' || e.target.id === 'c-page' || e.target.id === 'c-date') { st.cont[{ 'c-total': 'total', 'c-page': 'page', 'c-date': 'date' }[e.target.id]] = e.target.value; render() }
+})
+document.addEventListener('input', e => {
+  const f = e.target.closest('.filters input[data-f]'); if (f) { clearTimeout(f._t); f._t = setTimeout(() => { st[f.closest('.filters').dataset.scope][f.dataset.f] = f.value; st.recPage = 1; render(); const n = $('.filters input[data-f="person"]'); if (n) { n.focus(); n.setSelectionRange(n.value.length, n.value.length) } }, 250) }
+  const rg = e.target.dataset.rg; if (rg === 'name' || rg === 'anno') st.recog.rows[+e.target.dataset.i][rg] = e.target.value
+  if (rg === 'amt') { st.recog.rows[+e.target.dataset.i].amt = e.target.value; const g = st.recog, got = g.rows.reduce((a, r) => a + (+r.amt || 0), 0); const pc = $('.page-check'); if (pc) pc.innerHTML = `纸本合计 <b class="num">${yuan(g.paperTotal)}</b>${got === g.paperTotal ? '<span class="pill repaid">对上了</span>' : `<span class="pill warn">识别合计 ${yuan(got)}，差 ${yuan(got - g.paperTotal, true)}</span>`}` }
+})
+document.addEventListener('submit', e => {
+  if (e.target.id !== 'c-form') return
+  e.preventDefault()
+  const name = $('#c-name').value.trim(), amt = +$('#c-amt').value || 0
+  if (!name || !amt) { toast(!name ? '先填姓名' : '再填金额'); (!name ? $('#c-name') : $('#c-amt')).focus(); return }
+  const [, bid] = route(), b = B(bid), ev = +$('#c-ev').value, cat = $('#c-cat').value, anno = $('#c-anno').value.trim()
+  let p = persons.find(x => x.name === name), isNew = !p
+  if (!p) { p = { id: persons.length + 1, name, rel: '其他', py: '', phone: '', note: '' }; persons.push(p) }
+  const dup = !isNew && R.some(r => r.p === p.id && r.e === ev && r.b === b.id && r.cat === cat)
+  st.cont.page = $('#c-page').value; st.cont.total = $('#c-total').value; st.cont.date = $('#c-date').value
+  add(p.id, ev, b.id, '收', amt, st.cont.date, 'pending', { cat, page: st.cont.page, anno })
+  st.cont.rows.unshift({ name, amt, cat, anno, isNew, dup })
+  render()
+})
+document.addEventListener('keydown', e => {
+  const typing = /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)
+  if (e.key === 'Escape') { closeAll(); return }
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openSearch(); return }
+  if (typing) {
+    if ($('#palette').classList.contains('on') && e.key === 'Enter') { const a = $('#pres a'); if (a) a.click() }
+    return
+  }
+  if (e.key === '/') { e.preventDefault(); openSearch() }
+  if (e.key.toLowerCase() === 'n') { e.preventDefault(); openEntry() }
+})
+document.addEventListener('paste', e => { if (route()[0] === 'recognize' && st.recog && st.recog.step === 1 && e.clipboardData.files.length) { $('#drop').click() } })
+window.addEventListener('hashchange', () => { closeAll(); st.recSel = 0; st.bookTab = st.nextTab || 'records'; st.nextTab = ''; window.scrollTo(0, 0); render() })
+render()
+</script>
+</body>
+</html>

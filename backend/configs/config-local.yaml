@@ -24,6 +24,8 @@ auth:
   adminUserIds: [1]
   mpTokenDays: 30
   webTokenDays: 14
+  # 开发期免登录：未带令牌的请求按该用户处理；只允许 debug 模式，线上配置不得出现。
+  devUserId: 1
 
 wechat:
   appID: "wx348e5ad03f9cd6ba"

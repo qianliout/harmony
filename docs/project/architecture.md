@@ -54,8 +54,8 @@ index.html → src/main.ts（createSSRApp + Pinia）→ src/pages.json 声明的
 - 页面在 `src/pages.json` 中声明；主包只放 tab 页，其余页面放分包。
 - API 调用在 `src/api/<领域>.ts`，统一经过 `src/api/http.ts`（基于 `uni.request`，H5 走 Vite 代理，小程序直连）。
 - 平台差异只用条件编译表达；图片识别相关代码只出现在 `#ifdef H5` 分支，小程序产物中不得包含。
-- 颜色、字号、间距只引用 `src/styles/tokens.scss` 的 token，主题变量在 `src/styles/theme.ts`；桌面浏览器中 H5 居中为 430px 画布。
-- 交互与视觉规范见 `docs/03-前端交互与UI规范.md`，原型见 `docs/project/index.html`。
+- 颜色、字号、间距只引用 `src/styles/tokens.scss` 的 token，主题变量在 `src/styles/theme.ts`；小程序按 430px 手机画布设计，H5 使用桌面外壳，见 `docs/10-Web桌面版实现.md`。
+- 交互与视觉规范见 `docs/03-前端交互与UI规范.md`，手机原型见 `docs/project/index.html`，Web 桌面原型见 `docs/project/web-prototype.html`。
 
 ## 后续业务模块
 

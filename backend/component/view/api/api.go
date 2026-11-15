@@ -19,17 +19,18 @@ func NewViewAPI(srv *service.ViewSrv) *ViewAPI {
 
 func (a *ViewAPI) PersonTimeline(c *gin.Context) {
 	q := record.Query{
-		PersonID:  uint64(utils.GetInt64FromQuery(c, "personId")),
-		BookID:       uint64(utils.GetInt64FromQuery(c, "bookId")),
-		BookCategory: utils.GetStrFromQuery(c, "bookCategory"),
-		EventType:    utils.GetStrFromQuery(c, "eventType"),
-		EventID:   uint64(utils.GetInt64FromQuery(c, "eventId")),
-		ItemKind:  utils.GetStrFromQuery(c, "itemKind"),
-		Direction: utils.GetStrFromQuery(c, "direction"),
-		Status:    utils.GetStrFromQuery(c, "status"),
-		From:      utils.GetStrFromQuery(c, "from"),
-		To:        utils.GetStrFromQuery(c, "to"),
-		Keyword:   utils.GetStrFromQuery(c, "keyword"),
+		PersonID:      uint64(utils.GetInt64FromQuery(c, "personId")),
+		BookID:        uint64(utils.GetInt64FromQuery(c, "bookId")),
+		BookCategory:  utils.GetStrFromQuery(c, "bookCategory"),
+		EventType:     utils.GetStrFromQuery(c, "eventType"),
+		EventID:       uint64(utils.GetInt64FromQuery(c, "eventId")),
+		ItemKind:      utils.GetStrFromQuery(c, "itemKind"),
+		Direction:     utils.GetStrFromQuery(c, "direction"),
+		Status:        utils.GetStrFromQuery(c, "status"),
+		From:          utils.GetStrFromQuery(c, "from"),
+		To:            utils.GetStrFromQuery(c, "to"),
+		Keyword:       utils.GetStrFromQuery(c, "keyword"),
+		PersonKeyword: utils.GetStrFromQuery(c, "personKeyword"),
 	}
 	timeline, err := a.srv.PersonTimeline(c.Request.Context(), q)
 	if err != nil {
@@ -59,7 +60,7 @@ func (a *ViewAPI) PendingOwed(c *gin.Context) {
 		response.JsonErr(c, err)
 		return
 	}
-	response.JsonOK(c, response.WithItem(list))
+	response.JsonOK(c, response.WithItem(list), response.WithCustomField("truncated", list.Truncated))
 }
 
 func (a *ViewAPI) PendingOwing(c *gin.Context) {
@@ -68,7 +69,7 @@ func (a *ViewAPI) PendingOwing(c *gin.Context) {
 		response.JsonErr(c, err)
 		return
 	}
-	response.JsonOK(c, response.WithItem(list))
+	response.JsonOK(c, response.WithItem(list), response.WithCustomField("truncated", list.Truncated))
 }
 
 func RegisterRoutes(group *gin.RouterGroup, api *ViewAPI) {

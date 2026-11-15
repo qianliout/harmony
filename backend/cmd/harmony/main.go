@@ -61,6 +61,7 @@ import (
 	"harmony/infra/rdb"
 	"harmony/migrate"
 	"harmony/web"
+
 	"gorm.io/gorm"
 )
 
@@ -303,7 +304,7 @@ func run(ctx context.Context, log *logger.Logger, cfg *config.Config) error {
 	authapi.RegisterPublicRoutes(v1, authAPI)
 	recognizeapi.RegisterPublicRoutes(v1, recognizeAPI)
 
-	protected := v1.Group("", middleware.Auth(authSrv))
+	protected := v1.Group("", middleware.Auth(authSrv, cfg.Auth.DevUserID))
 	authapi.RegisterRoutes(protected, authAPI)
 	dictapi.RegisterRoutes(protected, dictAPI)
 	personapi.RegisterRoutes(protected, personAPI)

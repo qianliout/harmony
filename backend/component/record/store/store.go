@@ -50,6 +50,31 @@ func (s *Store) List(db *gorm.DB, ownerID uint64, q record.Query, f *modelfilter
 	return items, total, nil
 }
 
+// Summary 复用列表的全部筛选条件，统计条数与收、送、未回礼金额（单位分）。
+func (s *Store) Summary(db *gorm.DB, ownerID uint64, q record.Query) (record.Summary, error) {
+	var row struct {
+		Count       int64 `gorm:"column:record_count"`
+		InCent      int64 `gorm:"column:in_cent"`
+		OutCent     int64 `gorm:"column:out_cent"`
+		PendingCent int64 `gorm:"column:pending_cent"`
+	}
+	err := s.filtered(db, ownerID, q).
+		Select(`COUNT(*) AS record_count,
+			COALESCE(SUM(CASE WHEN direction = 'in' THEN total_cent ELSE 0 END), 0) AS in_cent,
+			COALESCE(SUM(CASE WHEN direction = 'out' THEN total_cent ELSE 0 END), 0) AS out_cent,
+			COALESCE(SUM(CASE WHEN direction = 'in' AND status = 'pending' THEN total_cent ELSE 0 END), 0) AS pending_cent`).
+		Scan(&row).Error
+	if err != nil {
+		return record.Summary{}, err
+	}
+	return record.Summary{
+		Count:       row.Count,
+		InCent:      row.InCent,
+		OutCent:     row.OutCent,
+		PendingCent: row.PendingCent,
+	}, nil
+}
+
 func (s *Store) filtered(db *gorm.DB, ownerID uint64, q record.Query) *gorm.DB {
 	query := db.Model(&record.Record{}).Where("owner_id = ?", ownerID)
 	if q.BookCategory != "" {
@@ -66,6 +91,15 @@ func (s *Store) filtered(db *gorm.DB, ownerID uint64, q record.Query) *gorm.DB {
 	}
 	if q.PersonID > 0 {
 		query = query.Where("person_id = ?", q.PersonID)
+	}
+	if q.PersonKeyword != "" {
+		// 姓名按包含匹配，全拼与首字母按前缀匹配，避免拼音中段误命中。
+		like := "%" + q.PersonKeyword + "%"
+		prefix := q.PersonKeyword + "%"
+		query = query.Where(`person_id IN (
+			SELECT id FROM person WHERE owner_id = ? AND
+			(name LIKE ? OR name_pinyin LIKE ? OR name_initials LIKE ?)
+		)`, ownerID, like, prefix, prefix)
 	}
 	if q.EventID > 0 {
 		query = query.Where("event_id = ?", q.EventID)

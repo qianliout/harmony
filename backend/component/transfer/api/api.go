@@ -22,11 +22,17 @@ func NewTransferAPI(srv *service.TransferSrv) *TransferAPI {
 
 func (a *TransferAPI) Export(c *gin.Context) {
 	q := record.Query{
-		BookID:    uint64(utils.GetInt64FromQuery(c, "bookId")),
-		PersonID:  uint64(utils.GetInt64FromQuery(c, "personId")),
-		EventID:   uint64(utils.GetInt64FromQuery(c, "eventId")),
-		Direction: utils.GetStrFromQuery(c, "direction"),
-		Status:    utils.GetStrFromQuery(c, "status"),
+		BookID:        uint64(utils.GetInt64FromQuery(c, "bookId")),
+		PersonID:      uint64(utils.GetInt64FromQuery(c, "personId")),
+		EventID:       uint64(utils.GetInt64FromQuery(c, "eventId")),
+		BookCategory:  utils.GetStrFromQuery(c, "bookCategory"),
+		EventType:     utils.GetStrFromQuery(c, "eventType"),
+		ItemKind:      utils.GetStrFromQuery(c, "itemKind"),
+		PersonKeyword: utils.GetStrFromQuery(c, "personKeyword"),
+		Direction:     utils.GetStrFromQuery(c, "direction"),
+		Status:        utils.GetStrFromQuery(c, "status"),
+		From:          utils.GetStrFromQuery(c, "from"),
+		To:            utils.GetStrFromQuery(c, "to"),
 	}
 	filename, contentType, payload, err := a.srv.Export(c.Request.Context(), utils.GetStrFromQuery(c, "format"), q)
 	if err != nil {

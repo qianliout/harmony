@@ -35,7 +35,7 @@ make -C backend run
 cd frontend && pnpm install && pnpm dev:h5
 ```
 
-H5 需要登录：开发阶段可签发访问令牌，在登录页底部“使用访问令牌登录”粘贴：
+开发期免登录：`config-local.yaml` 的 `auth.devUserId: 1` 让未带令牌的请求直接按用户 1 处理，打开 H5 即进首页；该项只允许 `debug` 模式，`release` 下配置了会拒绝启动。需要验证真实登录时删掉该项，再签发访问令牌，在登录页底部“使用访问令牌登录”粘贴：
 
 ```bash
 cd backend
@@ -53,7 +53,7 @@ server: { host: 127.0.0.1, port: 8080, mode: debug }
 database: { path: data/harmony.db }
 storage: { uploadDir: data/uploads }
 recognize: { provider: qwen, model: qwen3-vl-plus, highResolution: true, dailyLimit: 100 }
-auth: { adminUserIds: [1], mpTokenDays: 30, webTokenDays: 14 }
+auth: { adminUserIds: [1], mpTokenDays: 30, webTokenDays: 14, devUserId: 1 }
 wechat: { appID: wx348e5ad03f9cd6ba, envVersion: develop }
 backup: { dir: data/backups, keepDays: 7 }
 ```

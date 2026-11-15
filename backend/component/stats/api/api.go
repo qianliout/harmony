@@ -26,7 +26,12 @@ func (a *StatsAPI) Years(c *gin.Context) {
 }
 
 func (a *StatsAPI) Year(c *gin.Context) {
+	// year=all 不能用 GetInt64FromQuery 读取，否则会被解析成 0。
+	raw := utils.GetStrFromQuery(c, "year")
 	year := utils.GetInt64FromQuery(c, "year")
+	if raw == "all" {
+		year = -1
+	}
 	result, err := a.srv.Year(c.Request.Context(), year)
 	if err != nil {
 		response.JsonErr(c, err)

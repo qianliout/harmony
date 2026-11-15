@@ -6,6 +6,16 @@
     }
   },
   "pages": [
+    // #ifdef H5
+    {
+      "path": "pages/web/index",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "人情往来账本"
+      }
+    }
+    // #endif
+    // #ifndef H5
     {
       "path": "pages/index/index",
       "style": {
@@ -30,8 +40,32 @@
         "navigationBarTitleText": "我的"
       }
     }
+    // #endif
   ],
   "subPackages": [
+    // #ifdef H5
+    {
+      "root": "sub-web",
+      "pages": [
+        { "path": "records", "style": { "navigationStyle": "custom" } },
+        { "path": "people", "style": { "navigationStyle": "custom" } },
+        { "path": "person", "style": { "navigationStyle": "custom" } },
+        { "path": "events", "style": { "navigationStyle": "custom" } },
+        { "path": "event", "style": { "navigationStyle": "custom" } },
+        { "path": "books", "style": { "navigationStyle": "custom" } },
+        { "path": "book", "style": { "navigationStyle": "custom" } },
+        { "path": "repay", "style": { "navigationStyle": "custom" } },
+        { "path": "stats", "style": { "navigationStyle": "custom" } },
+        { "path": "notes", "style": { "navigationStyle": "custom" } },
+        { "path": "pages", "style": { "navigationStyle": "custom" } },
+        { "path": "settings", "style": { "navigationStyle": "custom" } },
+        { "path": "recognize", "style": { "navigationStyle": "custom" } },
+        { "path": "recognize-history", "style": { "navigationStyle": "custom" } },
+        { "path": "login", "style": { "navigationStyle": "custom" } }
+      ]
+    }
+    // #endif
+    // #ifndef H5
     {
       "root": "sub-person",
       "pages": [
@@ -75,25 +109,7 @@
         { "path": "transfer", "style": { "navigationBarTitleText": "导入导出" } },
         { "path": "settings", "style": { "navigationBarTitleText": "偏好设置" } }
       ]
-    }
-    // #ifdef H5
-    ,
-    {
-      "root": "sub-recognize",
-      "pages": [
-        { "path": "index", "style": { "navigationBarTitleText": "识别礼簿" } },
-        { "path": "history", "style": { "navigationBarTitleText": "识别历史" } }
-      ]
     },
-    {
-      "root": "sub-auth",
-      "pages": [
-        { "path": "login", "style": { "navigationBarTitleText": "登录" } }
-      ]
-    }
-    // #endif
-    // #ifdef MP-WEIXIN
-    ,
     {
       "root": "sub-auth",
       "pages": [
@@ -102,6 +118,7 @@
     }
     // #endif
   ],
+  // #ifndef H5
   "tabBar": {
     "color": "#968B83",
     "selectedColor": "#C8372D",
@@ -134,6 +151,7 @@
       }
     ]
   },
+  // #endif
   "globalStyle": {
     "navigationStyle": "custom",
     "navigationBarTextStyle": "black",

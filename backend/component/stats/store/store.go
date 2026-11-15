@@ -1,7 +1,6 @@
 package store
 
 import (
-
 	"gorm.io/gorm"
 )
 
@@ -13,10 +12,10 @@ type Totals struct {
 }
 
 type MonthRow struct {
-	Month       int   `gorm:"column:m"`
+	Month       int    `gorm:"column:m"`
 	Direction   string `gorm:"column:direction"`
-	TotalCent   int64 `gorm:"column:total_cent"`
-	RecordCount int64 `gorm:"column:cnt"`
+	TotalCent   int64  `gorm:"column:total_cent"`
+	RecordCount int64  `gorm:"column:cnt"`
 }
 
 type KindRow struct {
@@ -29,6 +28,8 @@ type KindRow struct {
 type EventTypeRow struct {
 	Type        string `gorm:"column:type"`
 	TotalCent   int64  `gorm:"column:total_cent"`
+	InCent      int64  `gorm:"column:in_cent"`
+	OutCent     int64  `gorm:"column:out_cent"`
 	RecordCount int64  `gorm:"column:record_count"`
 	EventCount  int64  `gorm:"column:event_count"`
 }
@@ -40,6 +41,7 @@ type PersonRow struct {
 	InCent      int64  `gorm:"column:in_cent"`
 	OutCent     int64  `gorm:"column:out_cent"`
 	RecordCount int64  `gorm:"column:record_count"`
+	LastDate    string `gorm:"column:last_date"`
 }
 
 type BookRow struct {
@@ -126,6 +128,8 @@ func (s *Store) ByEventType(db *gorm.DB, ownerID uint64, start, end string) ([]E
 	err := db.Table("record AS r").
 		Select(`e.type AS type,
 			COALESCE(SUM(r.total_cent), 0) AS total_cent,
+			COALESCE(SUM(CASE WHEN r.direction = 'in' THEN r.total_cent ELSE 0 END), 0) AS in_cent,
+			COALESCE(SUM(CASE WHEN r.direction = 'out' THEN r.total_cent ELSE 0 END), 0) AS out_cent,
 			COUNT(*) AS record_count,
 			COUNT(DISTINCT r.event_id) AS event_count`).
 		Joins("JOIN event AS e ON e.id = r.event_id AND e.owner_id = r.owner_id").
@@ -141,7 +145,8 @@ func (s *Store) TopPersons(db *gorm.DB, ownerID uint64, start, end string, limit
 		Select(`r.person_id, p.name, p.relation,
 			COALESCE(SUM(CASE WHEN r.direction = 'in' THEN r.total_cent ELSE 0 END), 0) AS in_cent,
 			COALESCE(SUM(CASE WHEN r.direction = 'out' THEN r.total_cent ELSE 0 END), 0) AS out_cent,
-			COUNT(*) AS record_count`).
+			COUNT(*) AS record_count,
+			MAX(r.occurred_on) AS last_date`).
 		Joins("JOIN person AS p ON p.id = r.person_id AND p.owner_id = r.owner_id").
 		Where("r.owner_id = ? AND r.occurred_on >= ? AND r.occurred_on < ?", ownerID, start, end).
 		Group("r.person_id, p.name, p.relation").

@@ -10,7 +10,14 @@ import {
   type LoginResult,
 } from '@/api/auth'
 
-const LOGIN_PATH = '/sub-auth/login'
+const LOGIN_PATH = (() => {
+  // #ifdef H5
+  return '/sub-web/login'
+  // #endif
+  // #ifndef H5
+  return '/sub-auth/login'
+  // #endif
+})()
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<AuthUser | null>(null)
@@ -26,11 +33,13 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function loadMe(): Promise<void> {
+    // #ifndef H5
     if (!getToken()) {
       user.value = null
       ready.value = true
       return
     }
+    // #endif
     const me = await fetchMe()
     user.value = me.user
     client.value = me.client
@@ -77,7 +86,7 @@ export const useAuthStore = defineStore('auth', () => {
       // #ifdef H5
       const pages = getCurrentPages()
       const current = pages[pages.length - 1]
-      const redirect = current ? `/${current.route}` : '/pages/index/index'
+      const redirect = current ? `/${current.route}` : '/pages/web/index'
       if (redirect.startsWith(LOGIN_PATH)) {
         return false
       }

@@ -1,17 +1,23 @@
 # Web 端能力与宽屏布局
 
+> 注意：本文档的"H5 保持 430px 手机画布、只有识别页宽屏"布局结论已被 `10-Web桌面版实现.md` 取代。H5 现在使用桌面外壳；识别核对、上传增强、识别历史、快捷键等识别相关细节仍以本文档为准。
+
 本文档说明网页（H5）相对小程序多出来的能力，以及网页在电脑大屏上的布局方案。
 
 ## 定位
 
 两端是同一套 `frontend/` 源码编译出来的，记账、查询、统计、合并、导入导出完全一致，这是 `fen.md` 第 6 节第 16 条的要求。网页在此之上多出"照片识别"这一组能力，以及服务于它的电脑端交互。
 
-现在网页在电脑上是一个居中的 430px 手机画布，所以看起来像在"模拟小程序"。这对日常记账没有问题，但识别核对需要一边看原图一边改表格，手机宽度放不下。方案是：
+原先 H5 在电脑上是一个居中的 430px 手机画布，只有识别页临时切换宽屏。该布局已被 `10-Web桌面版实现.md` 的桌面外壳取代：记账、查询、统计等页面都有独立的桌面表格与抽屉，不再复用手机画布。
 
-- 识别相关页面在大屏上切换为宽屏布局，充分利用屏幕。
-- 其余页面继续保持手机画布，与小程序共用同一份页面代码，不另写一套电脑版。
+本文档以下内容只保留识别相关的增量规格：
 
-不做完整电脑版的原因：每个页面写两套布局，工作量翻倍，而且两套布局迟早会出现功能差异。日常记账在手机上更方便，电脑主要用来批量识别纸本，宽屏投入集中在识别上收益最大。以后某个页面确实需要宽屏，用下文同样的机制单独开启即可。
+- 识别核对的宽屏双栏，仍以 1024px 为阈值；该布局放在桌面外壳的识别页内。
+- 上传增强：拖放、粘贴、压缩。
+- 识别历史与原图查看。
+- 核对步骤的键盘快捷键。
+
+其他页面的桌面布局、导航、表格与表单规格以 `10-Web桌面版实现.md` 为准。
 
 ## 能力边界
 
@@ -19,7 +25,7 @@
 | --- | --- | --- | --- |
 | 记账、查询、统计、合并、导入导出 | 有 | 有 | 共用代码 |
 | 照片识别：上传、识别、核对、写入 | 有，仅管理员 | 无 | 见 `06-识别接入千问.md`、`07-登录与鉴权.md` |
-| 识别历史与原图查看 | 有，仅管理员 | 无 | 新增页面 `sub-recognize/history` |
+| 识别历史与原图查看 | 有，仅管理员 | 无 | 页面 `sub-web/recognize-history` |
 | 记录详情"查看原图" | 有，仅管理员 | 无 | 识别来源的记录可跳转原图 |
 | 宽屏双栏核对 | 有 | 无 | 窗口宽度不低于 1024 时启用 |
 | 拖放、粘贴上传照片 | 有 | 无 | 桌面浏览器 |
@@ -32,54 +38,20 @@
 
 ### 判断条件
 
-同时满足两个条件才进入宽屏布局：
+识别页在桌面外壳中始终铺满内容区，不再有 430px 手机画布需要解除：
 
-1. 当前页面声明需要宽屏（目前只有 `sub-recognize/index` 和 `sub-recognize/history`）。
-1. 浏览器窗口宽度不低于 1024px。
+- 窗口宽度不低于 1024px：左原图、右核对表双栏。
+- 低于 1024px：切单栏，先看原图再核对；侧栏在 960px 以下改为顶部横向导航。
+- 其他页面由桌面外壳统一布局，不需要 `layout-wide`。
 
-`03-前端交互与UI规范.md` 原先写的阈值是 960，统一改为 1024：960 宽时右侧表格放不下"序号、姓名、大写、小写、名目、标注、确认"七列。
+`sub-recognize/index` 与 `history` 的旧页面包装在桌面版落地后删除，识别内容改为 `sub-web/recognize`、`sub-web/recognize-history`。
 
 ### 实现
 
-App.vue 里现在把整个应用根节点 `uni-app` 限制在 430px。宽屏页面需要临时解除这个限制：
-
-```scss
-/* #ifdef H5 */
-@media (min-width: 521px) {
-  uni-app { max-width: 430px; /* 现有规则不变 */ }
-}
-@media (min-width: 1024px) {
-  html.layout-wide uni-app { max-width: 1280px; }
-}
-/* #endif */
-```
-
-新增组合式函数 `src/composables/useWideLayout.ts`，整个文件内容用 `#ifdef H5` 包裹：
-
-```ts
-// 宽屏页面在显示时给 html 加上 layout-wide，离开时移除；小程序中不编译。
-export function useWideLayout() {
-  const isWide = ref(false)
-  const media = window.matchMedia('(min-width: 1024px)')
-  const sync = () => { isWide.value = media.matches }
-  onShow(() => {
-    document.documentElement.classList.add('layout-wide')
-    sync()
-    media.addEventListener('change', sync)
-  })
-  onHide(() => leave())
-  onUnload(() => leave())
-  function leave() {
-    document.documentElement.classList.remove('layout-wide')
-    media.removeEventListener('change', sync)
-  }
-  return { isWide }
-}
-```
-
-- 必须同时监听 `onHide` 和 `onUnload`：uni-app 的 H5 页面栈会保留上一个页面，从识别页跳到记录详情时只触发 `onHide`。
-- 页面根据 `isWide` 切换模板结构（双栏或单栏），不要只靠 CSS 媒体查询隐藏元素，避免两套 DOM 同时存在、键盘焦点落到看不见的输入框上。
-- 原生导航栏随根节点一起变宽，不需要单独处理。
+- 双栏用 CSS grid：`grid-template-columns: minmax(0, .9fr) minmax(0, 1.4fr)`；左栏 `position: sticky`，顶部距离顶栏 16px。
+- 窄屏根据 `useMediaQuery('(min-width: 1024px)')` 切换模板结构，不要只靠 CSS 隐藏，避免两套 DOM 同时存在、键盘焦点落到看不见的输入框上。
+- `useWideLayout` 与 `html.layout-wide` 在桌面版完成后删除；识别页不再需要临时放宽根节点。
+- 原图查看器、核对表、底部操作条分别复用 `ImageViewer`、`WebReviewTable`、汇总条组件。
 
 ## 识别核对：宽屏布局
 
@@ -155,7 +127,7 @@ export function useWideLayout() {
 
 ## 识别历史
 
-新增页面 `sub-recognize/history`，入口在识别页右上角"历史"。
+新增页面 `sub-web/recognize-history`，入口在识别页右上角"历史"。
 
 - 列表：缩略图、识别时间、状态（识别中、待核对、已写入、失败）、条数、合计。
 - 点击"待核对"的任务回到核对步骤，可以继续核对后写入；点击"已写入"的任务以只读方式查看原图和当时写入的记录。
@@ -164,41 +136,45 @@ export function useWideLayout() {
 
 ## 组件拆分
 
-`src/sub-recognize/index.vue` 现在有 1535 行，加上宽屏布局会超过 2000 行。按步骤和区域拆成组件，放在分包目录内，不进主包：
+现有 `src/sub-recognize/` 已按步骤拆出组件。桌面版不复制这些组件，只把页面编排移到 `sub-web/recognize`，核对表格换成桌面版本：
 
 ```text
 src/sub-recognize/
-├── index.vue                    步骤编排与状态，只保留流程逻辑
-├── history.vue                  识别历史
-└── components/
-    ├── RecognizeUpload.vue      上传步骤（含拖放、粘贴、压缩）
-    ├── RecognizeProgress.vue    识别中
-    ├── ReviewList.vue           窄屏核对列表
-    ├── ReviewTable.vue          宽屏核对表格
-    ├── ReviewRowEditor.vue      单行编辑（两种布局共用的字段逻辑）
-    ├── PageCheckBar.vue         本页核对条
-    ├── ImageViewer.vue          原图缩放、拖动、旋转
-    └── RecognizeDone.vue        完成步骤
+├── components/
+│   ├── RecognizeUpload.vue      上传步骤（含拖放、粘贴、压缩）
+│   ├── RecognizeProgress.vue    识别中
+│   ├── ReviewList.vue           窄屏核对列表
+│   ├── ReviewTable.vue          现有宽屏核对表格（小程序不引用）
+│   ├── PageCheckBar.vue         本页核对条
+│   ├── ImageViewer.vue          原图缩放、拖动、旋转
+│   └── RecognizeDone.vue        完成步骤
+├── useReviewState.ts            核对行、勾选、匹配、回礼草稿
+└── input.ts                     上传校验
+
+src/sub-web/recognize.vue        桌面识别页（薄壳）
+src/sub-web/recognize-history.vue
+src/web/views/RecognizeView.vue  步骤编排
+src/web/components/WebReviewTable.vue  桌面核对表格
 ```
 
-两种布局共用同一份核对状态（行数组、勾选、匹配选择、回礼草稿），放在 `src/sub-recognize/useReviewState.ts` 中，切换窗口宽度时不丢失已做的修改。
+两种布局共用 `useReviewState`，切换窗口宽度时不丢失已做的修改。组件文件名保持现有命名，避免与旧页面重复实现。
 
 ## 改动清单
 
 | 文件 | 改动 |
 | --- | --- |
-| `frontend/src/App.vue` | 增加 `html.layout-wide` 规则 |
-| `frontend/src/composables/useWideLayout.ts` | 新增，`#ifdef H5` |
-| `frontend/src/composables/useHotkeys.ts` | 新增，`#ifdef H5` |
-| `frontend/src/sub-recognize/` | 按上节拆分；新增宽屏表格、原图查看器、历史页 |
-| `frontend/src/pages.json` | `sub-recognize` 分包增加 `history`，仍在 `#ifdef H5` 内 |
+| `frontend/src/sub-web/recognize.vue` | 新增，H5 识别页薄壳 |
+| `frontend/src/sub-web/recognize-history.vue` | 新增，识别历史 |
+| `frontend/src/web/views/RecognizeView.vue` | 新增，步骤编排与桌面布局 |
+| `frontend/src/web/components/WebReviewTable.vue` | 新增，桌面核对表格 |
+| `frontend/src/sub-recognize/components/` | 复用；按桌面需要补 props，不复制业务逻辑 |
+| `frontend/src/composables/useHotkeys.ts` | 复用，识别核对步骤启用 |
 | `frontend/src/pages/index/index.vue` | 识别入口只对管理员显示 |
-| `docs/03-前端交互与UI规范.md` | 宽屏阈值 960 改为 1024，识别页规格引用本文档 |
 
 ## 验收
 
-1. 浏览器宽 1440：首页、亲友、礼簿等页面仍是居中 430 画布；进入识别核对后变为双栏；返回首页后恢复 430。
-1. 在识别核对中把窗口从 1440 拖到 800，布局切换为单栏，已修改的姓名、勾选状态都还在。
+1. 1440 宽：识别核对为左原图右表格；窗口拖到 800 宽切单栏；姓名修改与勾选状态不丢失。
 1. 不碰鼠标，只用键盘完成一页 15 行的核对并写入。
 1. 从微信电脑版复制一张照片，在上传步骤粘贴，能直接进入识别。
-1. `make release-mp` 通过，小程序产物里搜不到 `layout-wide`、`useHotkeys`、`识别`。
+1. 非管理员看不到识别入口，直接访问识别页被拦回工作台。
+1. `make release-mp` 通过，小程序产物里搜不到 `sub-web`、`WebShell`、`useHotkeys`、`识别`。

@@ -138,5 +138,5 @@ export function unwrapItem<T>(body: ApiResponse<T>): T {
 
 /** 展开列表响应；后端约定列表 data 为数组，空列表为 []。 */
 export function unwrapPage<T>(body: ApiResponse<T[]>): Page<T> {
-  return { items: body.data ?? [], total: body.totalItems }
+  return { items: body.data ?? [], total: body.totalItems, custom: body.custom }
 }

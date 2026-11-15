@@ -24,12 +24,12 @@ import (
 )
 
 type StatsSrv struct {
-	rdb    *rdb.RDB
-	store  *store.Store
-	view   *viewservice.ViewSrv
+	rdb     *rdb.RDB
+	store   *store.Store
+	view    *viewservice.ViewSrv
 	persons *personstore.Store
-	books  *bookstore.Store
-	dicts  *dictstore.Store
+	books   *bookstore.Store
+	dicts   *dictstore.Store
 }
 
 func NewStatsSrv(
@@ -54,13 +54,25 @@ func (s *StatsSrv) Years(ctx context.Context) ([]int64, error) {
 	return s.store.Years(s.rdb.Get(), middleware.OwnerID(ctx))
 }
 
+// 全时间范围的起止日期，供 year=all 使用。
+const (
+	allRangeStart = "0001-01-01"
+	allRangeEnd   = "9999-12-31"
+)
+
 func (s *StatsSrv) Year(ctx context.Context, year int64) (*stats.Year, error) {
-	if year <= 0 {
-		year = int64(time.Now().Year())
-	}
 	ownerID := middleware.OwnerID(ctx)
-	startTime, endTime := utils.YearRange(year)
-	start, end := utils.DateString(startTime), utils.DateString(endTime)
+	start, end := allRangeStart, allRangeEnd
+	switch {
+	case year == 0:
+		// 未指定年份时保持“当前年”的既有行为。
+		year = int64(time.Now().Year())
+		startTime, endTime := utils.YearRange(year)
+		start, end = utils.DateString(startTime), utils.DateString(endTime)
+	case year > 0:
+		startTime, endTime := utils.YearRange(year)
+		start, end = utils.DateString(startTime), utils.DateString(endTime)
+	}
 	totals, err := s.store.Totals(s.rdb.Get(), ownerID, start, end)
 	if err != nil {
 		return nil, err
@@ -142,6 +154,8 @@ func (s *StatsSrv) Year(ctx context.Context, year int64) (*stats.Year, error) {
 			Type:        row.Type,
 			TypeLabel:   labelOr(consts.EventTypeLabels, row.Type),
 			Cent:        row.TotalCent,
+			InCent:      row.InCent,
+			OutCent:     row.OutCent,
 			RecordCount: row.RecordCount,
 			EventCount:  row.EventCount,
 		})
@@ -159,6 +173,7 @@ func (s *StatsSrv) Year(ctx context.Context, year int64) (*stats.Year, error) {
 			OutCent:     row.OutCent,
 			NetCent:     row.InCent - row.OutCent,
 			RecordCount: row.RecordCount,
+			LastDate:    row.LastDate,
 		})
 	}
 	byBook := make([]stats.BookStat, 0, len(bookRows))
@@ -176,18 +191,18 @@ func (s *StatsSrv) Year(ctx context.Context, year int64) (*stats.Year, error) {
 		})
 	}
 	return &stats.Year{
-		Year:        year,
-		InCent:      totals.InCent,
-		OutCent:     totals.OutCent,
-		NetCent:     totals.InCent - totals.OutCent,
-		RecordCount: totals.RecordCount,
-		PersonCount: totals.PersonCount,
+		Year:           year,
+		InCent:         totals.InCent,
+		OutCent:        totals.OutCent,
+		NetCent:        totals.InCent - totals.OutCent,
+		RecordCount:    totals.RecordCount,
+		PersonCount:    totals.PersonCount,
 		Monthly:        monthly,
 		ByBookCategory: byCategory,
 		ByItem:         byItem,
-		ByEventType: byType,
-		TopPersons:  topPersons,
-		ByBook:      byBook,
+		ByEventType:    byType,
+		TopPersons:     topPersons,
+		ByBook:         byBook,
 	}, nil
 }
 
@@ -237,6 +252,7 @@ func (s *StatsSrv) Person(ctx context.Context, personID uint64) (*stats.PersonSt
 		OutCent:     summary.OutCent,
 		NetCent:     summary.NetCent,
 		RecordCount: summary.RecordCount,
+		LastDate:    summary.LastDate,
 	}, nil
 }
 
