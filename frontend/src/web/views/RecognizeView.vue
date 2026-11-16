@@ -891,12 +891,12 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
-/* 桌面核对按文档保持左原图 45%、右表格 55%；窄屏仍回落单列。 */
+/* 核对区表格压成 6 列后，右侧给到 60%；低于 1180px 直接上下排列，避免列被挤窄。 */
 .web-rec {
-  grid-template-columns: minmax(0, 45fr) minmax(0, 55fr);
+  grid-template-columns: minmax(0, 40fr) minmax(0, 60fr);
 }
 
-@media (max-width: 960px) {
+@media (max-width: 1180px) {
   .web-rec {
     grid-template-columns: minmax(0, 1fr);
   }

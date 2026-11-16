@@ -2,7 +2,7 @@
 
 本机与线上统一使用 SQLite 的人情往来账本。后端 Go + Gin + GORM，前端 uni-app（一套代码产出 H5 与微信小程序）；识别走阿里云百炼通义千问视觉模型（当前可用模型 qwen3-vl-plus，可通过配置切换）。
 
-需求见 [docs/project/fen.md](docs/project/fen.md)，技术方案见 [docs/](docs/README.md)，上线步骤见 [docs/09-部署上线.md](docs/09-部署上线.md)。
+需求见 [docs/project/需求.md](docs/project/需求.md)，精简实施方案见 [docs/project/方案.md](docs/project/方案.md)，本地启动与 API 约定见下方。
 
 ## 已实现
 

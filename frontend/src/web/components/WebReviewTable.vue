@@ -27,7 +27,7 @@ interface FlagView {
 
 /** 把原生 input/select 事件包装成 useReviewState 期望的 detail.value 形状。 */
 function asDetail(event: Event): Event {
-  const target = event.target as HTMLInputElement | HTMLSelectElement | null
+  const target = event.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | null
   return { detail: { value: target?.value ?? '' } } as unknown as Event
 }
 
@@ -119,13 +119,10 @@ function repayTotalText(row: ReviewRow, index: number): string {
     <thead>
       <tr>
         <th class="rv-col-check">确认</th>
-        <th class="rv-col-seq">序</th>
-        <th>姓名</th>
-        <th>大写</th>
-        <th>小写</th>
-        <th>名目</th>
-        <th>纸本标注</th>
-        <th>提示</th>
+        <th class="rv-col-name">姓名</th>
+        <th class="rv-col-amount">金额</th>
+        <th class="rv-col-kind">名目</th>
+        <th class="rv-col-note">标注与提示</th>
         <th class="rv-col-ops" />
       </tr>
     </thead>
@@ -152,32 +149,27 @@ function repayTotalText(row: ReviewRow, index: number): string {
               @change="toggleRow(row)"
             />
           </td>
-          <td class="rv-col-seq web-num web-muted">{{ row.seq }}</td>
-
           <td class="rv-col-name">
-            <input
-              class="web-input rv-input"
-              type="text"
-              :data-cell="`${row.key}:name`"
-              :value="row.name"
-              :disabled="readonly"
-              placeholder="姓名"
-              @focus="review.activate(row)"
-              @input="review.onNameInput(row, asDetail($event))"
-            />
-            <span v-if="row.matchStatus === 'none' && row.name.trim()" class="rv-tag rv-tag--new">新</span>
-            <span v-else-if="row.matchStatus === 'single'" class="rv-tag">{{ candidateLabel(row) }}</span>
+            <div class="rv-name">
+              <span class="rv-seq web-num web-muted">{{ row.seq }}</span>
+              <div class="rv-name__box">
+                <input
+                  class="web-input rv-input"
+                  type="text"
+                  :data-cell="`${row.key}:name`"
+                  :value="row.name"
+                  :disabled="readonly"
+                  placeholder="姓名"
+                  @focus="review.activate(row)"
+                  @input="review.onNameInput(row, asDetail($event))"
+                />
+                <span v-if="row.matchStatus === 'none' && row.name.trim()" class="rv-tag rv-tag--new">新</span>
+                <span v-else-if="row.matchStatus === 'single'" class="rv-tag">{{ candidateLabel(row) }}</span>
+              </div>
+            </div>
           </td>
 
-          <td
-            class="rv-col-upper"
-            :class="{ 'rv-mismatch': row.amountMismatch }"
-            :title="row.amountMismatch ? review.mismatchTitle(row) : undefined"
-          >
-            {{ row.amountUpper || '—' }}
-          </td>
-
-          <td class="rv-col-lower" :class="{ 'rv-mismatch': row.amountMismatch }">
+          <td class="rv-col-amount">
             <input
               class="web-input rv-input rv-input--num"
               type="text"
@@ -186,8 +178,16 @@ function repayTotalText(row: ReviewRow, index: number): string {
               :value="row.amountText"
               :disabled="readonly"
               placeholder="金额"
+              :class="{ 'rv-mismatch': row.amountMismatch }"
               @input="review.onAmountInput(row, asDetail($event))"
             />
+            <span
+              class="rv-upper"
+              :class="{ 'rv-upper--mismatch': row.amountMismatch }"
+              :title="row.amountMismatch ? review.mismatchTitle(row) : row.amountUpper"
+            >
+              {{ row.amountUpper || '—' }}
+            </span>
           </td>
 
           <td class="rv-col-kind">
@@ -205,18 +205,16 @@ function repayTotalText(row: ReviewRow, index: number): string {
           </td>
 
           <td class="rv-col-note">
-            <input
-              class="web-input rv-input"
-              type="text"
+            <textarea
+              class="web-textarea rv-note"
+              rows="1"
               :data-cell="`${row.key}:note`"
               :value="row.note"
               :disabled="readonly"
               placeholder="纸本标注"
+              @keydown.enter.prevent
               @input="review.onNoteInput(row, asDetail($event))"
             />
-          </td>
-
-          <td class="rv-col-flags">
             <div class="rv-flags">
               <span
                 v-for="flag in flagsOf(row)"
@@ -245,7 +243,7 @@ function repayTotalText(row: ReviewRow, index: number): string {
         </tr>
 
         <tr v-if="hasSubRow(row)" class="rv-subrow">
-          <td :colspan="9">
+          <td :colspan="6">
             <div class="rv-sub">
               <div v-if="row.matchStatus === 'multiple' && row.candidates.length" class="rv-sub__block">
                 <span class="rv-sub__label">同名亲友</span>
@@ -352,20 +350,38 @@ function repayTotalText(row: ReviewRow, index: number): string {
 
 <style lang="scss" scoped>
 .rv-table :deep(.web-table) {
-  min-width: 960px;
+  table-layout: fixed;
 }
 
 .rv-table :deep(th),
 .rv-table :deep(td) {
-  padding: 7px 10px;
+  padding: 6px;
 }
 
-.rv-col-check,
-.rv-col-seq {
+.rv-col-check {
+  width: 40px;
   text-align: center;
 }
 
+.rv-col-amount {
+  width: 96px;
+  text-align: right;
+}
+
+.rv-col-name {
+  width: 140px;
+}
+
+.rv-col-kind {
+  width: 74px;
+}
+
+.rv-col-note {
+  white-space: normal;
+}
+
 .rv-col-ops {
+  width: 32px;
   text-align: right;
 }
 
@@ -405,6 +421,28 @@ function repayTotalText(row: ReviewRow, index: number): string {
   text-align: right;
 }
 
+.rv-note {
+  width: 100%;
+  min-height: 44px;
+  max-height: 90px;
+  padding: 4px 8px;
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: 18px;
+  resize: none;
+  scrollbar-width: none;
+  field-sizing: content;
+}
+
+.rv-note::-webkit-scrollbar {
+  display: none;
+}
+
+.rv-note:focus {
+  border-color: var(--c-primary);
+  background: var(--c-surface);
+}
+
 .rv-select {
   height: 30px;
   padding: 0 24px 0 8px;
@@ -416,10 +454,53 @@ function repayTotalText(row: ReviewRow, index: number): string {
   min-width: 220px;
 }
 
-.rv-col-upper {
+.rv-name {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.rv-seq {
+  flex: none;
+  width: 16px;
+  padding-top: 8px;
+  font-size: 11px;
+  line-height: 14px;
+  text-align: right;
+}
+
+.rv-name__box {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.rv-name__box .rv-tag {
+  margin-top: 2px;
+}
+
+.rv-upper {
+  display: block;
+  overflow: hidden;
+  margin-top: 2px;
+  color: var(--c-ink-3);
   font-family: $font-serif;
-  font-size: 13px;
+  font-size: 11px;
+  line-height: 14px;
+  text-align: right;
+  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.rv-upper--mismatch {
+  color: var(--c-pending);
+  font-weight: 600;
+}
+
+.rv-col-note .rv-flags {
+  margin-top: 4px;
 }
 
 .rv-mismatch {
@@ -491,8 +572,12 @@ function repayTotalText(row: ReviewRow, index: number): string {
   white-space: normal;
 }
 
+.rv-col-kind .rv-select {
+  width: 100%;
+}
+
 .rv-del {
-  padding: 0 6px;
+  padding: 0 2px;
   color: var(--c-ink-3);
 }
 
@@ -541,7 +626,7 @@ function repayTotalText(row: ReviewRow, index: number): string {
 
 .rv-repay {
   display: grid;
-  grid-template-columns: 18px minmax(140px, 1.2fr) 130px 84px 84px 64px;
+  grid-template-columns: 16px minmax(110px, 1fr) 120px 70px 70px 56px;
   align-items: center;
   gap: 6px;
   flex: 1;
