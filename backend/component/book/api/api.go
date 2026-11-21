@@ -4,132 +4,129 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"harmony/component/book/service"
+	"harmony/infra/logger"
+	"harmony/infra/middleware"
 	"harmony/infra/model/book"
 	"harmony/infra/response"
 	"harmony/infra/utils"
 )
 
 type BookAPI struct {
-	srv *service.BookSrv
+	bookSrv *service.BookSrv
+	log     *logger.Logger
 }
 
-func NewBookAPI(srv *service.BookSrv) *BookAPI {
-	return &BookAPI{srv: srv}
+func NewBookAPI(bookSrv *service.BookSrv) *BookAPI {
+	api := BookAPI{
+		bookSrv: bookSrv,
+		log: logger.New(
+			logger.WithModule("book"),
+			logger.WithSubModule("api"),
+		),
+	}
+	return &api
 }
 
-func (a *BookAPI) List(c *gin.Context) {
-	items, err := a.srv.List(c.Request.Context(), utils.GetStrFromQuery(c, "status"))
+func (api *BookAPI) SearchBook(ctx *gin.Context) {
+	param := &book.SearchBookParam{
+		OwnerID:  middleware.OwnerID(ctx.Request.Context()),
+		Keyword:  utils.GetStrFromQuery(ctx, "keyword"),
+		Category: utils.GetStrFromQuery(ctx, "category"),
+		Filter:   utils.GetFilter(ctx),
+	}
+	items, total, err := api.bookSrv.SearchBook(ctx.Request.Context(), param)
 	if err != nil {
-		response.JsonErr(c, err)
+		response.JSONError(ctx, err)
 		return
 	}
-	response.JsonOK(c, response.WithItems(items))
+	response.JSONOK(ctx,
+		response.WithItems(items),
+		response.WithTotalItems(total),
+		response.WithItemsPerPage(param.Filter.Limit),
+		response.WithStartIndex(param.Filter.Offset),
+	)
 }
 
-func (a *BookAPI) Detail(c *gin.Context) {
-	id := utils.GetInt64FromQuery(c, "id")
-	if id <= 0 {
-		response.JsonErr(c, response.BadRequest("缺少礼簿 id", "missing id"))
+func (api *BookAPI) GetBook(ctx *gin.Context) {
+	param := &book.GetBookParam{
+		ID:      utils.GetInt64FromQuery(ctx, "id"),
+		OwnerID: middleware.OwnerID(ctx.Request.Context()),
+	}
+	param = param.Serialize()
+	if err := param.Check(); err != nil {
+		response.JSONError(ctx, response.NewErr(err))
 		return
 	}
-	item, err := a.srv.Detail(c.Request.Context(), uint64(id))
+	item, err := api.bookSrv.GetBook(ctx.Request.Context(), param)
 	if err != nil {
-		response.JsonErr(c, err)
+		response.JSONError(ctx, err)
 		return
 	}
-	response.JsonOK(c, response.WithItem(item))
+	response.JSONOK(ctx, response.WithItem(item))
 }
 
-func (a *BookAPI) Create(c *gin.Context) {
-	var param book.CreateParam
-	if err := c.ShouldBindJSON(&param); err != nil {
-		response.JsonErr(c, response.BadRequest("提交的数据格式不正确", "invalid request body"))
+func (api *BookAPI) CreateBook(ctx *gin.Context) {
+	param := &book.CreateBookParam{}
+	if err := ctx.ShouldBindJSON(param); err != nil {
+		response.JSONError(ctx, response.NewErr(err))
 		return
 	}
-	item, err := a.srv.Create(c.Request.Context(), param)
+	param.OwnerID = middleware.OwnerID(ctx.Request.Context())
+	param = param.Serialize()
+	if err := param.Check(); err != nil {
+		response.JSONError(ctx, response.NewErr(err))
+		return
+	}
+	item, err := api.bookSrv.CreateBook(ctx.Request.Context(), param)
 	if err != nil {
-		response.JsonErr(c, err)
+		response.JSONError(ctx, err)
 		return
 	}
-	response.JsonOK(c, response.WithItem(item))
+	response.JSONOK(ctx, response.WithItem(item))
 }
 
-func (a *BookAPI) Update(c *gin.Context) {
-	id := utils.GetInt64FromQuery(c, "id")
-	if id <= 0 {
-		response.JsonErr(c, response.BadRequest("缺少礼簿 id", "missing id"))
+func (api *BookAPI) UpdateBook(ctx *gin.Context) {
+	param := &book.UpdateBookParam{}
+	if err := ctx.ShouldBindJSON(param); err != nil {
+		response.JSONError(ctx, response.NewErr(err))
 		return
 	}
-	var param book.UpdateParam
-	if err := c.ShouldBindJSON(&param); err != nil {
-		response.JsonErr(c, response.BadRequest("提交的数据格式不正确", "invalid request body"))
+	param.ID = utils.GetInt64FromQuery(ctx, "id")
+	param.OwnerID = middleware.OwnerID(ctx.Request.Context())
+	param = param.Serialize()
+	if err := param.Check(); err != nil {
+		response.JSONError(ctx, response.NewErr(err))
 		return
 	}
-	item, err := a.srv.Update(c.Request.Context(), uint64(id), param)
+	item, err := api.bookSrv.UpdateBook(ctx.Request.Context(), param)
 	if err != nil {
-		response.JsonErr(c, err)
+		response.JSONError(ctx, err)
 		return
 	}
-	response.JsonOK(c, response.WithItem(item))
+	response.JSONOK(ctx, response.WithItem(item))
 }
 
-func (a *BookAPI) Delete(c *gin.Context) {
-	id := utils.GetInt64FromQuery(c, "id")
-	if id <= 0 {
-		response.JsonErr(c, response.BadRequest("缺少礼簿 id", "missing id"))
+func (api *BookAPI) DeleteBook(ctx *gin.Context) {
+	param := &book.GetBookParam{
+		ID:      utils.GetInt64FromQuery(ctx, "id"),
+		OwnerID: middleware.OwnerID(ctx.Request.Context()),
+	}
+	param = param.Serialize()
+	if err := param.Check(); err != nil {
+		response.JSONError(ctx, response.NewErr(err))
 		return
 	}
-	if err := a.srv.Delete(c.Request.Context(), uint64(id)); err != nil {
-		response.JsonErr(c, err)
+	if err := api.bookSrv.DeleteBook(ctx.Request.Context(), param); err != nil {
+		response.JSONError(ctx, err)
 		return
 	}
-	response.JsonOK(c)
+	response.JSONOK(ctx)
 }
 
-func (a *BookAPI) MergePreview(c *gin.Context) {
-	var param book.MergeParam
-	if err := c.ShouldBindJSON(&param); err != nil {
-		response.JsonErr(c, response.BadRequest("提交的数据格式不正确", "invalid request body"))
-		return
-	}
-	preview, err := a.srv.MergePreview(c.Request.Context(), param)
-	if err != nil {
-		response.JsonErr(c, err)
-		return
-	}
-	response.JsonOK(c, response.WithItem(preview))
-}
-
-func (a *BookAPI) Merge(c *gin.Context) {
-	var param book.MergeParam
-	if err := c.ShouldBindJSON(&param); err != nil {
-		response.JsonErr(c, response.BadRequest("提交的数据格式不正确", "invalid request body"))
-		return
-	}
-	log, err := a.srv.Merge(c.Request.Context(), param)
-	if err != nil {
-		response.JsonErr(c, err)
-		return
-	}
-	response.JsonOK(c, response.WithItem(log))
-}
-
-func (a *BookAPI) MergeLogs(c *gin.Context) {
-	items, err := a.srv.MergeLogs(c.Request.Context())
-	if err != nil {
-		response.JsonErr(c, err)
-		return
-	}
-	response.JsonOK(c, response.WithItems(items))
-}
-
-func RegisterRoutes(group *gin.RouterGroup, api *BookAPI) {
-	group.GET("/books", api.List)
-	group.GET("/books/detail", api.Detail)
-	group.POST("/books", api.Create)
-	group.PUT("/books", api.Update)
-	group.DELETE("/books", api.Delete)
-	group.POST("/books/merge/preview", api.MergePreview)
-	group.POST("/books/merge", api.Merge)
-	group.GET("/books/merge-logs", api.MergeLogs)
+func RegisterRoutes(group *gin.RouterGroup, bookAPI *BookAPI) {
+	group.GET("/books", bookAPI.SearchBook)
+	group.GET("/books/detail", bookAPI.GetBook)
+	group.POST("/books", bookAPI.CreateBook)
+	group.PUT("/books", bookAPI.UpdateBook)
+	group.DELETE("/books", bookAPI.DeleteBook)
 }

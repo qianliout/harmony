@@ -1,120 +1,82 @@
 # 人情往来账本
 
-本机与线上统一使用 SQLite 的人情往来账本。后端 Go + Gin + GORM，前端 uni-app（一套代码产出 H5 与微信小程序）；识别走阿里云百炼通义千问视觉模型（当前可用模型 qwen3-vl-plus，可通过配置切换）。
+把多本纸质人情礼簿数字化成一份电子总账：能记、能查、能改。后端 Go + Gin + GORM + SQLite（纯 Go 驱动），前端 uni-app（Vue 3 + TypeScript），识别走阿里云百炼通义千问视觉模型（默认 qwen3-vl-plus）。
 
-需求见 [docs/project/需求.md](docs/project/需求.md)，精简实施方案见 [docs/project/方案.md](docs/project/方案.md)，本地启动与 API 约定见下方。
+需求见 [docs/project/需求.md](docs/project/需求.md)，实施方案见 [docs/project/方案.md](docs/project/方案.md)。
 
 ## 已实现
 
-- 礼簿、亲友、事项、记录 CRUD；跨礼簿按人/事项聚合；回礼关联（多对多）、解除关联、删除保护。
-- 回礼状态按方向显示：收礼“未回礼/已回礼/不用回”，主动送礼“对方未回/对方已回/不用回”，回礼生成的送礼显示“回礼”。
-- 主维度筛选：礼簿类别、事项类型、人、时间；辅以具体礼簿、事项、名目、方向、状态。
-- 纸本标注解析、纸本回礼补录、整理标注、按页核对、礼簿合并。
-- 全局/范围内搜索（文字、金额、区间、年份、纸本页码）、按年/事项/人/礼簿统计。
-- 识别（仅 H5、仅管理员）：千问视觉识别、后台任务、核对、批量写入、识别历史、签名原图 URL。
-- 登录鉴权：小程序微信登录、网页小程序码/访问令牌登录、令牌续期、登录设备、管理员、数据隔离。
-- 导入导出：CSV（带 BOM）/ JSON、CSV 预览与导入。
-- 部署：单二进制内置 H5、SQLite 备份、migrate/backup/token 子命令、systemd/Caddy/deploy 脚本。
+- 礼簿：新建、编辑、删除（有记录时阻止），按名称、种类查询；种类预置人情礼、火炮、其他，可自定义。
+- 亲友：姓名 + 备注全局唯一，同名的不同人用备注区分（显示为「张三 · 村东」）；按姓名、备注、拼音首字母查找；有记录时阻止删除。
+- 记录：收挂礼簿、送记事情；记一笔时可按姓名匹配已有亲友，找不到自动新建。
+- 总账：所有礼簿合并，按礼簿、方向、日期、关键词筛选，顶部显示总收、总送、笔数；礼簿详情只看本簿收礼，亲友详情看全部收送。
+- 识别（仅 H5）：上传礼簿照片 → 后台识别 → 四列核对表（确认、姓名、金额、备注）→ 选礼簿和方向后批量写入。
+- 本机单用户，无登录；所有数据归属 `owner_id = 1`。
 
 ## 环境
 
-- Go 1.25+；SQLite 使用纯 Go 驱动，构建不需要 CGO。
+- Go 1.25+，构建不需要 CGO。
 - pnpm 12+；Node 由 pnpm 按 `frontend/package.json` 的 `devEngines.runtime` 自动下载。
 - 本机默认：后端 `127.0.0.1:8080`，H5 开发 `http://localhost:5173`。
 
 ## 初始化与启动
 
 ```bash
-# 1. 建库并写入种子（可重复执行）
-make -C backend migrate
-
-# 2. 启动后端
-make -C backend run
-
-# 3. 启动 H5（/api 代理到 8080）
-cd frontend && pnpm install && pnpm dev:h5
+make -C backend migrate          # 按 backend/migrate/sqlite/schema.sql 建表，可重复执行
+make -C backend run              # 启动后端
+cd frontend && pnpm install && pnpm dev:h5   # 启动 H5，/api 代理到 8080
 ```
 
-开发期免登录：`config-local.yaml` 的 `auth.devUserId: 1` 让未带令牌的请求直接按用户 1 处理，打开 H5 即进首页；该项只允许 `debug` 模式，`release` 下配置了会拒绝启动。需要验证真实登录时删掉该项，再签发访问令牌，在登录页底部“使用访问令牌登录”粘贴：
-
-```bash
-cd backend
-go run ./cmd/harmony token issue -config configs/config-local.yaml -user 1 -days 14
-```
-
-首次用微信登录小程序时会认领 `app_user(1)` 成为管理员；其他微信用户得到独立空账本。
+改表结构时直接改快照；字段变化大时备份后删除 `backend/data/harmony.db*` 重新 migrate。
 
 ## 配置
 
-`backend/configs/config-local.yaml` 只写非机密配置：
-
-```yaml
-server: { host: 127.0.0.1, port: 8080, mode: debug }
-database: { path: data/harmony.db }
-storage: { uploadDir: data/uploads }
-recognize: { provider: qwen, model: qwen3-vl-plus, highResolution: true, dailyLimit: 100 }
-auth: { adminUserIds: [1], mpTokenDays: 30, webTokenDays: 14, devUserId: 1 }
-wechat: { appID: wx348e5ad03f9cd6ba, envVersion: develop }
-backup: { dir: data/backups, keepDays: 7 }
-```
-
-机密只放环境变量：
+`backend/configs/config-local.yaml` 只写非机密配置（server、database、storage、recognize、backup）。识别的 API Key 只放环境变量：
 
 ```bash
-export DASHSCOPE_API_KEY=sk-...          # 或 HARMONY_RECOGNIZE_API_KEY / ALI_BAILIAN_API_KEY
-export HARMONY_WECHAT_APP_SECRET=...     # 小程序 code2Session 与小程序码
-export HARMONY_AUTH_SECRET=...           # 原图签名，>=32 字符；debug 模式有开发默认值
+export DASHSCOPE_API_KEY=sk-...   # 或 HARMONY_RECOGNIZE_API_KEY / ALI_BAILIAN_API_KEY
 ```
 
-## 交付与部署
+## 交付
 
 ```bash
-make release              # 本机单二进制，内置 H5
+make release                      # 本机单二进制，内置 H5
 ./backend/bin/harmony -config backend/configs/config-local.yaml
-
-make release-linux        # 产出 Linux 二进制
-HOST=root@server make deploy   # 备份 → migrate → 切换 → 重启 → 健康检查/回滚
+./backend/bin/harmony backup -config backend/configs/config-local.yaml   # VACUUM INTO 在线备份
 ```
-
-服务器使用 `deploy/harmony.service`、`deploy/Caddyfile`、`deploy/backup.sh`；备份通过 `VACUUM INTO`，每天 03:30 由 systemd timer 执行并同步到 OSS。
 
 ## 验证
 
 ```bash
 cd backend && CGO_ENABLED=0 go build ./... && go vet ./... && go test ./test -count=1
-cd frontend && pnpm build          # vue-tsc + H5 + 小程序
-make release-mp                    # 小程序产物不得包含 recognize/识别
+cd frontend && pnpm build         # vue-tsc + H5 + 小程序
 ```
 
-`backend/test` 使用临时 SQLite 文件，不需要 MySQL；覆盖跨礼簿聚合、口径一致、软确认、回礼、合并、纸本标注、按页核对、搜索意图、识别回滚、登录/扫码/隔离/签名、日期边界与并发回礼。
-
-识别真实样张放在 `backend/test/testdata/recognize/`（不入库），用 `go test -tags live -run TestRecognizeLive -v ./test/` 评测五项指标。
+`backend/test` 使用临时 SQLite 文件，覆盖礼簿、亲友（同名备注区分、歧义匹配）、记录（收送规则、筛选与合计口径一致）、识别批量写入（写入前校验、同批新姓名只建一次）。
 
 ## 目录
 
 ```text
 backend/
-├── cmd/harmony/          服务入口与 migrate/backup/token 子命令
-├── component/<领域>/      api / service / store 三层
-├── infra/                 logger、response、rdb、middleware、model、utils
+├── cmd/harmony/          服务入口与 migrate/backup 子命令
+├── component/<领域>/      api / service / store 三层：person、book、record、recognize、health
+├── infra/                 consts、logger、response、rdb、middleware、model、utils
 ├── migrate/sqlite/        SQLite 全量建表快照
 ├── configs/               本机配置
-├── test/                  service 测试与真实样张目录
+├── test/                  service 集成测试
 └── web/                   H5 构建产物嵌入目录
 frontend/src/
-├── pages/ sub-*/          页面（pages.json 声明）
-├── components/            通用展示组件
+├── pages/web/ sub-web/    H5 页面：总账、礼簿、亲友、识别
+├── web/                   H5 外壳、视图、抽屉、组件
 ├── api/                   请求封装与按领域接口
-├── stores/                字典、记账上下文、登录态
-├── composables/           分页、软确认、宽屏、快捷键
-├── styles/                token、色板、全局样式
-└── utils/                 金额、日期、中文大写、导航
+├── components/            通用展示组件
+├── stores/ styles/ utils/
 deploy/                    systemd、Caddy、备份与发布脚本
 ```
 
 ## API 约定
 
-- 前缀 `/api/v1`；除健康检查与登录入口外都需要 `Authorization: Bearer <token>`。
-- 传输层恒为 HTTP 200，业务状态在 `code`；401 未登录、403 无权限、409 软确认/关联冲突。
-- 金额以“分”为单位、字段以 `Cent` 结尾；日期 `YYYY-MM-DD`；时间戳 `int64` 毫秒。
-- 识别接口额外要求 `X-Client-Platform: h5`，并且只对管理员开放；原图只通过签名 URL 访问。
+- 前缀 `/api/v1`；传输层恒为 HTTP 200，业务状态在 `code`：400 参数错误、404 不存在、409 冲突（`custom.reason` 为 `duplicate_person`、`person_ambiguous`、`has_reference`、`state_conflict`）。
+- 不使用路径参数：GET/DELETE 参数走 query，POST 走 JSON body，PUT 的 `id` 走 query、其余走 body。
+- 金额以“分”为单位、字段以 `Cent` 结尾；日期 `YYYY-MM-DD`；时间戳 `int64` 毫秒；JSON 字段小驼峰。
+- 列表响应带 `totalItems`、`itemsPerPage`、`startIndex`，分页参数 `page`、`pageSize`。

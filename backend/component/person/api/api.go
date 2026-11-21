@@ -4,113 +4,128 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"harmony/component/person/service"
+	"harmony/infra/logger"
+	"harmony/infra/middleware"
 	"harmony/infra/model/person"
 	"harmony/infra/response"
 	"harmony/infra/utils"
 )
 
 type PersonAPI struct {
-	srv *service.PersonSrv
+	personSrv *service.PersonSrv
+	log       *logger.Logger
 }
 
-func NewPersonAPI(srv *service.PersonSrv) *PersonAPI {
-	return &PersonAPI{srv: srv}
-}
-
-func (a *PersonAPI) List(c *gin.Context) {
-	q := person.Query{
-		Keyword:  utils.GetStrFromQuery(c, "keyword"),
-		Relation: utils.GetStrFromQuery(c, "relation"),
+func NewPersonAPI(personSrv *service.PersonSrv) *PersonAPI {
+	api := PersonAPI{
+		personSrv: personSrv,
+		log: logger.New(
+			logger.WithModule("person"),
+			logger.WithSubModule("api"),
+		),
 	}
-	f := utils.GetFilter(c)
-	items, total, err := a.srv.List(c.Request.Context(), q, f)
+	return &api
+}
+
+func (api *PersonAPI) SearchPerson(ctx *gin.Context) {
+	param := &person.SearchPersonParam{
+		OwnerID: middleware.OwnerID(ctx.Request.Context()),
+		Keyword: utils.GetStrFromQuery(ctx, "keyword"),
+		Filter:  utils.GetFilter(ctx),
+	}
+	items, total, err := api.personSrv.SearchPerson(ctx.Request.Context(), param)
 	if err != nil {
-		response.JsonErr(c, err)
+		response.JSONError(ctx, err)
 		return
 	}
-	response.JsonOK(c,
+	response.JSONOK(ctx,
 		response.WithItems(items),
-		response.WithTotal(total),
-		response.WithPerPage(f.Limit),
-		response.WithIndex(f.Offset),
+		response.WithTotalItems(total),
+		response.WithItemsPerPage(param.Filter.Limit),
+		response.WithStartIndex(param.Filter.Offset),
 	)
 }
 
-func (a *PersonAPI) Recent(c *gin.Context) {
-	limit := int(utils.GetInt64FromQuery(c, "limit"))
-	items, err := a.srv.Recent(c.Request.Context(), limit)
+func (api *PersonAPI) GetPerson(ctx *gin.Context) {
+	param := &person.GetPersonParam{
+		ID:      utils.GetInt64FromQuery(ctx, "id"),
+		OwnerID: middleware.OwnerID(ctx.Request.Context()),
+	}
+	param = param.Serialize()
+	if err := param.Check(); err != nil {
+		response.JSONError(ctx, response.NewErr(err))
+		return
+	}
+	item, err := api.personSrv.GetPerson(ctx.Request.Context(), param)
 	if err != nil {
-		response.JsonErr(c, err)
+		response.JSONError(ctx, err)
 		return
 	}
-	response.JsonOK(c, response.WithItems(items))
+	response.JSONOK(ctx, response.WithItem(item))
 }
 
-func (a *PersonAPI) Detail(c *gin.Context) {
-	id := utils.GetInt64FromQuery(c, "id")
-	if id <= 0 {
-		response.JsonErr(c, response.BadRequest("缺少亲友 id", "missing id"))
+func (api *PersonAPI) CreatePerson(ctx *gin.Context) {
+	param := &person.CreatePersonParam{}
+	if err := ctx.ShouldBindJSON(param); err != nil {
+		response.JSONError(ctx, response.NewErr(err))
 		return
 	}
-	item, err := a.srv.Detail(c.Request.Context(), uint64(id))
+	param.OwnerID = middleware.OwnerID(ctx.Request.Context())
+	param = param.Serialize()
+	if err := param.Check(); err != nil {
+		response.JSONError(ctx, response.NewErr(err))
+		return
+	}
+	item, err := api.personSrv.CreatePerson(ctx.Request.Context(), param)
 	if err != nil {
-		response.JsonErr(c, err)
+		response.JSONError(ctx, err)
 		return
 	}
-	response.JsonOK(c, response.WithItem(item))
+	response.JSONOK(ctx, response.WithItem(item))
 }
 
-func (a *PersonAPI) Create(c *gin.Context) {
-	var param person.CreateParam
-	if err := c.ShouldBindJSON(&param); err != nil {
-		response.JsonErr(c, response.BadRequest("提交的数据格式不正确", "invalid request body"))
+func (api *PersonAPI) UpdatePerson(ctx *gin.Context) {
+	param := &person.UpdatePersonParam{}
+	if err := ctx.ShouldBindJSON(param); err != nil {
+		response.JSONError(ctx, response.NewErr(err))
 		return
 	}
-	item, err := a.srv.Create(c.Request.Context(), param)
+	param.ID = utils.GetInt64FromQuery(ctx, "id")
+	param.OwnerID = middleware.OwnerID(ctx.Request.Context())
+	param = param.Serialize()
+	if err := param.Check(); err != nil {
+		response.JSONError(ctx, response.NewErr(err))
+		return
+	}
+	item, err := api.personSrv.UpdatePerson(ctx.Request.Context(), param)
 	if err != nil {
-		response.JsonErr(c, err)
+		response.JSONError(ctx, err)
 		return
 	}
-	response.JsonOK(c, response.WithItem(item))
+	response.JSONOK(ctx, response.WithItem(item))
 }
 
-func (a *PersonAPI) Update(c *gin.Context) {
-	id := utils.GetInt64FromQuery(c, "id")
-	if id <= 0 {
-		response.JsonErr(c, response.BadRequest("缺少亲友 id", "missing id"))
+func (api *PersonAPI) DeletePerson(ctx *gin.Context) {
+	param := &person.GetPersonParam{
+		ID:      utils.GetInt64FromQuery(ctx, "id"),
+		OwnerID: middleware.OwnerID(ctx.Request.Context()),
+	}
+	param = param.Serialize()
+	if err := param.Check(); err != nil {
+		response.JSONError(ctx, response.NewErr(err))
 		return
 	}
-	var param person.UpdateParam
-	if err := c.ShouldBindJSON(&param); err != nil {
-		response.JsonErr(c, response.BadRequest("提交的数据格式不正确", "invalid request body"))
+	if err := api.personSrv.DeletePerson(ctx.Request.Context(), param); err != nil {
+		response.JSONError(ctx, err)
 		return
 	}
-	item, err := a.srv.Update(c.Request.Context(), uint64(id), param)
-	if err != nil {
-		response.JsonErr(c, err)
-		return
-	}
-	response.JsonOK(c, response.WithItem(item))
+	response.JSONOK(ctx)
 }
 
-func (a *PersonAPI) Delete(c *gin.Context) {
-	id := utils.GetInt64FromQuery(c, "id")
-	if id <= 0 {
-		response.JsonErr(c, response.BadRequest("缺少亲友 id", "missing id"))
-		return
-	}
-	if err := a.srv.Delete(c.Request.Context(), uint64(id)); err != nil {
-		response.JsonErr(c, err)
-		return
-	}
-	response.JsonOK(c)
-}
-
-func RegisterRoutes(group *gin.RouterGroup, api *PersonAPI) {
-	group.GET("/persons", api.List)
-	group.GET("/persons/recent", api.Recent)
-	group.GET("/persons/detail", api.Detail)
-	group.POST("/persons", api.Create)
-	group.PUT("/persons", api.Update)
-	group.DELETE("/persons", api.Delete)
+func RegisterRoutes(group *gin.RouterGroup, personAPI *PersonAPI) {
+	group.GET("/persons", personAPI.SearchPerson)
+	group.GET("/persons/detail", personAPI.GetPerson)
+	group.POST("/persons", personAPI.CreatePerson)
+	group.PUT("/persons", personAPI.UpdatePerson)
+	group.DELETE("/persons", personAPI.DeletePerson)
 }

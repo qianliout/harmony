@@ -17,19 +17,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	authapi "harmony/component/auth/api"
-	authservice "harmony/component/auth/service"
-	authstore "harmony/component/auth/store"
 	bookapi "harmony/component/book/api"
 	bookservice "harmony/component/book/service"
 	bookstore "harmony/component/book/store"
 	"harmony/component/config"
-	dictapi "harmony/component/dict/api"
-	dictservice "harmony/component/dict/service"
-	dictstore "harmony/component/dict/store"
-	eventapi "harmony/component/event/api"
-	eventservice "harmony/component/event/service"
-	eventstore "harmony/component/event/store"
 	healthapi "harmony/component/health/api"
 	healthservice "harmony/component/health/service"
 	personapi "harmony/component/person/api"
@@ -41,20 +32,6 @@ import (
 	recordapi "harmony/component/record/api"
 	recordservice "harmony/component/record/service"
 	recordstore "harmony/component/record/store"
-	searchapi "harmony/component/search/api"
-	searchservice "harmony/component/search/service"
-	searchstore "harmony/component/search/store"
-	settingapi "harmony/component/setting/api"
-	settingservice "harmony/component/setting/service"
-	settingstore "harmony/component/setting/store"
-	statsapi "harmony/component/stats/api"
-	statsservice "harmony/component/stats/service"
-	statsstore "harmony/component/stats/store"
-	transferapi "harmony/component/transfer/api"
-	transferservice "harmony/component/transfer/service"
-	viewapi "harmony/component/view/api"
-	viewservice "harmony/component/view/service"
-	viewstore "harmony/component/view/store"
 	"harmony/infra/consts"
 	"harmony/infra/logger"
 	"harmony/infra/middleware"
@@ -92,14 +69,8 @@ func main() {
 				os.Exit(1)
 			}
 			return
-		case "token":
-			if err := runToken(args, log); err != nil {
-				log.Error(context.Background()).Err(err).Msg("token command failed")
-				os.Exit(1)
-			}
-			return
 		default:
-			fmt.Fprintf(os.Stderr, "unknown command %q; available: migrate, backup, token\n", command)
+			fmt.Fprintf(os.Stderr, "unknown command %q; available: migrate, backup\n", command)
 			os.Exit(2)
 		}
 	}
@@ -153,38 +124,7 @@ func runMigrate(args []string, log *logger.Logger) error {
 	return nil
 }
 
-// runToken issue 在服务器上签发一个网页访问令牌，供小程序审核前登录网页使用。
-func runToken(args []string, log *logger.Logger) error {
-	if len(args) == 0 || args[0] != "issue" {
-		return fmt.Errorf("usage: harmony token issue -config <path> -user 1 -days 14")
-	}
-	fs := flag.NewFlagSet("token issue", flag.ExitOnError)
-	configPath := fs.String("config", "", "YAML config file path")
-	userID := fs.Uint64("user", 1, "user id")
-	days := fs.Int64("days", 14, "token valid days")
-	_ = fs.Parse(args[1:])
-	if err := config.Load(*configPath); err != nil {
-		return err
-	}
-	db, err := rdb.Open(config.Global.Database.Path)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = db.Close() }()
-	authSrv, err := authservice.NewAuthSrv(db, authstore.New(), nil, *config.Global)
-	if err != nil {
-		return err
-	}
-	login, err := authSrv.IssueTokenForCLI(context.Background(), *userID, *days)
-	if err != nil {
-		return err
-	}
-	log.Info(context.Background()).Uint64("userId", *userID).Msg("token issued")
-	fmt.Printf("token: %s\nexpiresAt: %d\nuser: %s\n", login.Token, login.ExpiresAt, login.User.Nickname)
-	return nil
-}
-
-// runBackup 用 VACUUM INTO 生成在线备份，并清理过期令牌与旧备份。
+// runBackup 用 VACUUM INTO 生成在线备份，并清理旧备份。
 func runBackup(args []string, log *logger.Logger) error {
 	if err := loadConfig(args); err != nil {
 		return err
@@ -203,9 +143,6 @@ func runBackup(args []string, log *logger.Logger) error {
 	escaped := strings.ReplaceAll(target, "'", "''")
 	if err := db.Get().Exec("VACUUM INTO '" + escaped + "'").Error; err != nil {
 		return fmt.Errorf("vacuum into backup: %w", err)
-	}
-	if err := db.Get().Exec("DELETE FROM auth_token WHERE expires_at < ?", time.Now().Add(-7*24*time.Hour)).Error; err != nil {
-		log.Warn(context.Background()).Err(err).Msg("prune expired tokens failed")
 	}
 	if cfg.Backup.KeepDays > 0 {
 		cutoff := time.Now().AddDate(0, 0, -cfg.Backup.KeepDays)
@@ -245,79 +182,39 @@ func run(ctx context.Context, log *logger.Logger, cfg *config.Config) error {
 		}
 	}()
 
-	dictStore := dictstore.New()
-	personStore := personstore.New()
-	bookStore := bookstore.New()
-	eventStore := eventstore.New()
-	recordStore := recordstore.New()
-	viewStore := viewstore.New()
-	statsStore := statsstore.New()
-	searchStore := searchstore.New()
-	settingStore := settingstore.New()
-	taskStore := recognizestore.New()
-
-	authStore := authstore.New()
-	wechatClient := authservice.NewWechatClient(cfg.Wechat.AppID, cfg.Wechat.AppSecret)
-	authSrv, err := authservice.NewAuthSrv(db, authStore, wechatClient, *cfg)
-	if err != nil {
-		return err
-	}
+	personDao := personstore.NewPersonDao(db)
+	bookDao := bookstore.NewBookDao(db)
+	recordDao := recordstore.NewRecordDao(db)
+	recognizeTaskDao := recognizestore.NewRecognizeTaskDao(db)
 
 	healthSrv := healthservice.NewHealthSrv(db)
-	dictSrv := dictservice.NewDictSrv(db, dictStore)
-	personSrv := personservice.NewPersonSrv(db, personStore)
-	bookSrv := bookservice.NewBookSrv(db, bookStore, dictStore, eventStore)
-	eventSrv := eventservice.NewEventSrv(db, eventStore, personStore)
-	recordSrv := recordservice.NewRecordSrv(db, recordStore, personStore, eventStore, bookStore, dictStore)
-	settingSrv := settingservice.NewSettingSrv(db, settingStore)
-	viewSrv := viewservice.NewViewSrv(db, viewStore, recordStore, recordSrv, personStore, eventStore, settingStore)
-	statsSrv := statsservice.NewStatsSrv(db, statsStore, viewSrv, personStore, bookStore, dictStore)
-	searchSrv := searchservice.NewSearchSrv(db, searchStore, recordSrv)
+	personSrv := personservice.NewPersonSrv(personDao, recordDao)
+	bookSrv := bookservice.NewBookSrv(bookDao, recordDao)
+	recordSrv := recordservice.NewRecordSrv(recordDao, personDao, bookDao, personSrv)
 	recognizer := recognizeservice.NewOpenAICompatRecognizer(cfg.Recognize)
-	recognizeSrv := recognizeservice.NewRecognizeSrv(db, taskStore, recordSrv, personStore, recordStore, authSrv, recognizer, cfg.Recognize, cfg.Storage.UploadDir)
-	if err := recognizeSrv.FailStale(ctx); err != nil {
+	recognizeSrv := recognizeservice.NewRecognizeSrv(recognizeTaskDao, personDao, bookDao, personSrv, recordSrv,
+		recognizer, cfg.Recognize, cfg.Storage.UploadDir)
+	if err := recognizeSrv.FailStaleRecognizeTask(ctx); err != nil {
 		log.Warn(ctx).Err(err).Msg("mark stale recognize tasks failed")
 	}
-	transferSrv := transferservice.NewTransferSrv(db, recordSrv, personStore, eventStore, bookStore, dictStore)
 
 	healthAPI := healthapi.NewHealthAPI(healthSrv)
-	authAPI := authapi.NewAuthAPI(authSrv)
-	dictAPI := dictapi.NewDictAPI(dictSrv)
 	personAPI := personapi.NewPersonAPI(personSrv)
 	bookAPI := bookapi.NewBookAPI(bookSrv)
-	eventAPI := eventapi.NewEventAPI(eventSrv)
 	recordAPI := recordapi.NewRecordAPI(recordSrv)
-	viewAPI := viewapi.NewViewAPI(viewSrv)
-	statsAPI := statsapi.NewStatsAPI(statsSrv)
-	searchAPI := searchapi.NewSearchAPI(searchSrv)
-	settingAPI := settingapi.NewSettingAPI(settingSrv)
 	recognizeAPI := recognizeapi.NewRecognizeAPI(recognizeSrv)
-	transferAPI := transferapi.NewTransferAPI(transferSrv)
 
 	gin.SetMode(cfg.Server.Mode)
 	engine := gin.New()
 	engine.Use(gin.Recovery())
 	engine.MaxMultipartMemory = 8 << 20
 
-	v1 := engine.Group("/api/v1", middleware.RequestID(), middleware.AccessLog())
+	v1 := engine.Group("/api/v1", middleware.RequestID(), middleware.Owner(), middleware.AccessLog())
 	healthapi.RegisterRoutes(v1, healthAPI)
-	authapi.RegisterPublicRoutes(v1, authAPI)
-	recognizeapi.RegisterPublicRoutes(v1, recognizeAPI)
-
-	protected := v1.Group("", middleware.Auth(authSrv, cfg.Auth.DevUserID))
-	authapi.RegisterRoutes(protected, authAPI)
-	dictapi.RegisterRoutes(protected, dictAPI)
-	personapi.RegisterRoutes(protected, personAPI)
-	bookapi.RegisterRoutes(protected, bookAPI)
-	eventapi.RegisterRoutes(protected, eventAPI)
-	recordapi.RegisterRoutes(protected, recordAPI)
-	viewapi.RegisterRoutes(protected, viewAPI)
-	statsapi.RegisterRoutes(protected, statsAPI)
-	searchapi.RegisterRoutes(protected, searchAPI)
-	settingapi.RegisterRoutes(protected, settingAPI)
-	transferapi.RegisterRoutes(protected, transferAPI)
-	recognizeGroup := protected.Group("", middleware.PlatformGuard(), middleware.AdminOnly(cfg.Auth.AdminUserIDs))
-	recognizeapi.RegisterRoutes(recognizeGroup, recognizeAPI)
+	personapi.RegisterRoutes(v1, personAPI)
+	bookapi.RegisterRoutes(v1, bookAPI)
+	recordapi.RegisterRoutes(v1, recordAPI)
+	recognizeapi.RegisterRoutes(v1, recognizeAPI)
 
 	if err := os.MkdirAll(cfg.Storage.UploadDir, 0o755); err != nil {
 		return fmt.Errorf("create upload dir: %w", err)

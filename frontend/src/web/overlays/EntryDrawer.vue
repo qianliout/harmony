@@ -1,130 +1,107 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+// 记一笔 / 编辑记录：方向、亲友、礼簿或事情、金额、日期、备注六项。
+// 收必须选礼簿；送不挂礼簿，只填事情。亲友可从候选里选，也可直接输入新姓名（同名不同人用备注区分）。
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 
 import { fetchBooks } from '@/api/book'
-import { createEvent, fetchEvents } from '@/api/event'
 import { ApiError } from '@/api/http'
-import { fetchPersonDetail } from '@/api/person'
+import { fetchPersonDetail, fetchPersons } from '@/api/person'
 import { createRecord, deleteRecord, fetchRecordDetail, updateRecord } from '@/api/record'
-import type { BookItem, EventItem, RecordDetail } from '@/api/types'
-import { useDictStore } from '@/stores/dict'
-import { useContextStore } from '@/stores/context'
+import type { BookItem, Direction, PersonItem } from '@/api/types'
+import type { EntryContext } from '@/stores/web'
 import { useWebUiStore } from '@/stores/web'
 import { centToChinese } from '@/utils/chinese-amount'
 import { todayString } from '@/utils/date'
 import { centToYuanText, yuanToCent } from '@/utils/money'
+import DateField from '@/web/components/DateField.vue'
 import WebIcon from '@/web/components/WebIcon.vue'
-import type { EntryContext } from '@/stores/web'
+
+/** 同名歧义时后端在 data 里返回的候选亲友。 */
+interface PersonCandidate {
+  id: number
+  name: string
+  remark: string
+}
 
 const props = defineProps<{ context: EntryContext }>()
 const ui = useWebUiStore()
-const dictStore = useDictStore()
-const contextStore = useContextStore()
 
+const recordId = props.context.recordId ?? 0
 const books = ref<BookItem[]>([])
-const events = ref<EventItem[]>([])
 const loading = ref(true)
 const saving = ref(false)
 const error = ref('')
-const conflict = ref('')
-const recordId = ref(props.context.recordId ?? 0)
-const newEventOpen = ref(false)
-const newEvent = reactive({ name: '', type: 'other', date: todayString() })
+const suggestions = ref<PersonItem[]>([])
+const candidates = ref<PersonCandidate[]>([])
+let suggestTimer: ReturnType<typeof setTimeout> | undefined
 
 const form = reactive({
+  direction: 'in' as Direction,
   personId: 0,
-  personName: '',
-  eventId: 0,
+  personLabel: '',
+  personQuery: '',
+  personRemark: '',
   bookId: 0,
-  direction: 'in',
-  itemKind: '',
+  matter: '',
   amountText: '',
-  giftName: '',
-  giftValueText: '',
   date: todayString(),
-  status: 'pending',
-  remark: '',
+  note: '',
 })
 
+const title = computed(() => (recordId ? '编辑记录' : '记一笔'))
 const amountCent = computed(() => yuanToCent(form.amountText))
-const giftValueCent = computed(() => yuanToCent(form.giftValueText))
-const totalCent = computed(() => amountCent.value + giftValueCent.value)
 const upper = computed(() => (amountCent.value > 0 ? centToChinese(amountCent.value) : ''))
-const selectedBook = computed(() => books.value.find((book) => book.id === form.bookId) ?? null)
+const isNewPerson = computed(() => !form.personId && form.personQuery.trim() !== '')
 
-const statusOptions = computed(() => {
-  if (form.direction === 'out') {
-    return [
-      { code: 'pending', label: '对方未回' },
-      { code: 'repaid', label: '对方已回' },
-      { code: 'none', label: '不用回' },
-    ]
-  }
-  return [
-    { code: 'pending', label: '未回礼' },
-    { code: 'repaid', label: '已回礼' },
-    { code: 'none', label: '不用回' },
-  ]
-})
-
-const eventOptions = computed(() => events.value)
-
-const title = computed(() => (recordId.value ? '编辑记录' : '记一笔'))
-
-function inferItemKind(): string {
-  if (form.giftName.trim() && amountCent.value === 0) return 'gift'
-  return selectedBook.value?.category === 'huopao' ? 'huopao' : 'cash'
+function choosePerson(person: { id: number; name: string; remark: string; displayName?: string }): void {
+  form.personId = person.id
+  form.personLabel = person.displayName || (person.remark ? `${person.name} · ${person.remark}` : person.name)
+  form.personQuery = form.personLabel
+  form.personRemark = ''
+  suggestions.value = []
+  candidates.value = []
 }
 
-function applyRecord(detail: RecordDetail): void {
-  form.personId = detail.personId
-  form.personName = detail.personName
-  form.eventId = detail.eventId
-  form.bookId = detail.bookId
-  form.direction = detail.direction
-  form.itemKind = detail.itemKind
-  form.amountText = detail.amountCent ? centToYuanText(detail.amountCent) : ''
-  form.giftName = detail.giftName
-  form.giftValueText = detail.giftValueCent ? centToYuanText(detail.giftValueCent) : ''
-  form.date = detail.occurredOn || todayString()
-  form.status = detail.status
-  form.remark = detail.remark
+function onPersonInput(): void {
+  form.personId = 0
+  candidates.value = []
+  if (suggestTimer) clearTimeout(suggestTimer)
+  const keyword = form.personQuery.trim()
+  if (!keyword) {
+    suggestions.value = []
+    return
+  }
+  suggestTimer = setTimeout(() => {
+    fetchPersons({ keyword, pageSize: 8 })
+      .then((page) => {
+        suggestions.value = page.items
+      })
+      .catch(() => {
+        suggestions.value = []
+      })
+  }, 200)
 }
 
 async function load(): Promise<void> {
   loading.value = true
   error.value = ''
   try {
-    const [bookList, eventPage] = await Promise.all([
-      fetchBooks('normal'),
-      fetchEvents({ page: 1, pageSize: 100 }),
-      dictStore.ensure(),
-      contextStore.load(),
-    ])
-    books.value = bookList
-    events.value = eventPage.items
-    if (recordId.value) {
-      applyRecord(await fetchRecordDetail(recordId.value))
+    books.value = (await fetchBooks()).items
+    if (recordId) {
+      const record = await fetchRecordDetail(recordId)
+      form.direction = record.direction
+      choosePerson({ id: record.personId, name: record.personName, remark: record.personRemark })
+      form.bookId = record.bookId
+      form.matter = record.matter
+      form.amountText = record.amountCent ? centToYuanText(record.amountCent) : ''
+      form.date = record.occurredOn
+      form.note = record.note
       return
     }
     if (props.context.personId) {
-      const person = await fetchPersonDetail(props.context.personId)
-      form.personId = person.id
-      form.personName = person.name
+      choosePerson(await fetchPersonDetail(props.context.personId))
     }
-    const preferredBook =
-      books.value.find((book) => book.id === props.context.bookId) ??
-      books.value.find((book) => book.id === contextStore.settings.lastBookId) ??
-      books.value[0]
-    form.bookId = preferredBook?.id ?? 0
-    form.eventId =
-      props.context.eventId ||
-      preferredBook?.defaultEventId ||
-      contextStore.settings.lastEventId ||
-      events.value[0]?.id ||
-      0
-    form.itemKind = preferredBook?.category === 'huopao' ? 'huopao' : 'cash'
-    form.date = todayString()
+    form.bookId = props.context.bookId || books.value[0]?.id || 0
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载失败'
   } finally {
@@ -132,97 +109,66 @@ async function load(): Promise<void> {
   }
 }
 
-function chooseDirection(direction: string): void {
-  form.direction = direction
-  form.status = 'pending'
+function validate(): string {
+  if (!form.personId && !form.personQuery.trim()) return '请选择或填写亲友'
+  if (recordId && !form.personId) return '请从候选里选择亲友'
+  if (form.direction === 'in' && !form.bookId) return '收礼需要选择礼簿'
+  if (!form.date) return '请选择日期'
+  return ''
 }
 
-async function save(again = false): Promise<void> {
-  error.value = ''
-  conflict.value = ''
-  const name = form.personName.trim()
-  if (!name) {
-    error.value = '请填写亲友姓名'
-    return
-  }
-  if (!amountCent.value && !form.giftName.trim()) {
-    error.value = '金额与礼品至少填一项'
-    return
-  }
-  if (!form.bookId || !form.eventId) {
-    error.value = '请选择事项和礼簿'
-    return
-  }
+function resetForNext(): void {
+  form.personId = 0
+  form.personLabel = ''
+  form.personQuery = ''
+  form.personRemark = ''
+  form.amountText = ''
+  form.note = ''
+}
+
+async function save(again: boolean): Promise<void> {
+  error.value = validate()
+  if (error.value) return
   saving.value = true
-  const params = {
-    personId: form.personId || undefined,
-    personName: name,
-    eventId: form.eventId,
-    bookId: form.bookId,
-    direction: form.direction,
-    itemKind: form.itemKind || inferItemKind(),
-    amountCent: amountCent.value,
-    giftName: form.giftName.trim(),
-    giftValueCent: giftValueCent.value,
-    occurredOn: form.date,
-    status: form.status,
-    remark: form.remark.trim(),
-    confirm: false,
-  }
+  const bookId = form.direction === 'in' ? form.bookId : 0
+  const matter = form.direction === 'out' ? form.matter.trim() : ''
   try {
-    if (recordId.value) {
-      await updateRecord(recordId.value, params)
+    if (recordId) {
+      await updateRecord(recordId, {
+        personId: form.personId,
+        bookId,
+        direction: form.direction,
+        amountCent: amountCent.value,
+        matter,
+        note: form.note.trim(),
+        occurredOn: form.date,
+      })
       ui.toast('已保存修改')
     } else {
-      await createRecord(params)
-      ui.toast(`已记下：${name} ${form.direction === 'in' ? '收' : '送'}`)
+      await createRecord({
+        personId: form.personId || undefined,
+        personName: form.personId ? undefined : form.personQuery.trim(),
+        personRemark: form.personId ? undefined : form.personRemark.trim(),
+        bookId,
+        direction: form.direction,
+        amountCent: amountCent.value,
+        matter,
+        note: form.note.trim(),
+        occurredOn: form.date,
+      })
+      ui.toast(`已记下：${form.personQuery.trim()} ${form.direction === 'in' ? '收' : '送'}`)
     }
     ui.markChanged()
-    if (again && !recordId.value) {
-      form.amountText = ''
-      form.giftName = ''
-      form.giftValueText = ''
-      form.remark = ''
-      form.status = 'pending'
+    if (again && !recordId) {
+      resetForNext()
       return
     }
     ui.close()
   } catch (err) {
-    if (err instanceof ApiError && err.code === 409 && (err.custom as Record<string, unknown> | null)?.reason === 'need_confirm') {
-      conflict.value = err.message || '同一人、事项、礼簿、名目下已有记录'
-      return
+    const ambiguous = err instanceof ApiError && err.custom?.reason === 'person_ambiguous' && Array.isArray(err.data)
+    if (ambiguous) {
+      candidates.value = (err as ApiError).data as PersonCandidate[]
     }
-    error.value = err instanceof Error ? err.message : '保存失败'
-  } finally {
-    saving.value = false
-  }
-}
-
-async function saveConfirmed(): Promise<void> {
-  saving.value = true
-  error.value = ''
-  try {
-    const params = {
-      personId: form.personId || undefined,
-      personName: form.personName.trim(),
-      eventId: form.eventId,
-      bookId: form.bookId,
-      direction: form.direction,
-      itemKind: form.itemKind || inferItemKind(),
-      amountCent: amountCent.value,
-      giftName: form.giftName.trim(),
-      giftValueCent: giftValueCent.value,
-      occurredOn: form.date,
-      status: form.status,
-      remark: form.remark.trim(),
-      confirm: true,
-    }
-    if (recordId.value) await updateRecord(recordId.value, params)
-    else await createRecord(params)
-    ui.markChanged()
-    ui.toast('已保存')
-    ui.close()
-  } catch (err) {
     error.value = err instanceof Error ? err.message : '保存失败'
   } finally {
     saving.value = false
@@ -230,10 +176,10 @@ async function saveConfirmed(): Promise<void> {
 }
 
 async function remove(): Promise<void> {
-  if (!recordId.value) return
+  if (!recordId) return
   if (!window.confirm('删除这条记录？此操作不能撤销。')) return
   try {
-    await deleteRecord(recordId.value)
+    await deleteRecord(recordId)
     ui.markChanged()
     ui.toast('已删除')
     ui.close()
@@ -242,28 +188,19 @@ async function remove(): Promise<void> {
   }
 }
 
-async function addEvent(): Promise<void> {
-  if (!newEvent.name.trim()) return
-  try {
-    const created = await createEvent({
-      name: newEvent.name.trim(),
-      type: newEvent.type,
-      eventDate: newEvent.date,
-      datePrecision: 'day',
-      host: 'other',
-    })
-    events.value = [created, ...events.value]
-    form.eventId = created.id
-    newEventOpen.value = false
-    newEvent.name = ''
-    ui.toast('事项已新建')
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : '新建事项失败'
-  }
-}
+watch(
+  () => form.direction,
+  (direction) => {
+    if (direction === 'in' && !form.bookId) form.bookId = books.value[0]?.id || 0
+  },
+)
 
 onMounted(() => {
   void load()
+})
+
+onBeforeUnmount(() => {
+  if (suggestTimer) clearTimeout(suggestTimer)
 })
 </script>
 
@@ -279,150 +216,102 @@ onMounted(() => {
       <div v-if="loading" class="web-empty">加载中…</div>
       <template v-else>
         <div v-if="error" class="web-alert web-alert--err">{{ error }}</div>
-        <div v-if="conflict" class="web-alert web-alert--warn">
-          <span>{{ conflict }}。如果是补录或分次给，可以继续保存。</span>
-          <button class="web-btn web-btn--sm" type="button" style="margin-left: auto" @click="saveConfirmed">
-            仍然保存
+        <div v-if="candidates.length" class="web-alert web-alert--warn entry-candidates">
+          <span>选择是哪一位：</span>
+          <button
+            v-for="item in candidates"
+            :key="item.id"
+            class="web-btn web-btn--sm"
+            type="button"
+            @click="choosePerson(item)"
+          >
+            {{ item.remark ? `${item.name} · ${item.remark}` : item.name }}
           </button>
         </div>
 
         <div class="web-field">
+          <label>方向</label>
+          <div class="web-seg web-seg--dir">
+            <button type="button" data-v="in" :class="{ 'web-seg__on': form.direction === 'in' }" @click="form.direction = 'in'">
+              收（别人来我家）
+            </button>
+            <button type="button" data-v="out" :class="{ 'web-seg__on': form.direction === 'out' }" @click="form.direction = 'out'">
+              送（我去别人家）
+            </button>
+          </div>
+        </div>
+
+        <div class="web-field entry-person">
           <label for="web-entry-person">亲友</label>
           <input
             id="web-entry-person"
-            v-model="form.personName"
+            v-model="form.personQuery"
             class="web-input"
-            placeholder="姓名或拼音首字母，没有会新建"
+            placeholder="姓名或拼音首字母"
             autocomplete="off"
-            :disabled="Boolean(recordId)"
+            @input="onPersonInput"
           />
-          <span class="web-field__hint">同名时会按后端软确认规则处理。</span>
+          <div v-if="suggestions.length" class="web-card entry-suggest">
+            <button
+              v-for="person in suggestions"
+              :key="person.id"
+              type="button"
+              class="entry-suggest__item"
+              @click="choosePerson(person)"
+            >
+              {{ person.displayName }}
+              <small class="web-muted">往来 {{ person.recordCount }} 笔</small>
+            </button>
+          </div>
+          <span v-if="form.personId" class="web-field__hint">已选：{{ form.personLabel }}</span>
+          <span v-else-if="isNewPerson" class="web-field__hint">没有选中已有亲友，保存时按姓名匹配，找不到就新建。</span>
+        </div>
+
+        <div v-if="isNewPerson && !recordId" class="web-field">
+          <label for="web-entry-remark">亲友备注</label>
+          <input
+            id="web-entry-remark"
+            v-model="form.personRemark"
+            class="web-input"
+            maxlength="32"
+            placeholder="选填；同名的不同人用备注区分，如 村东"
+          />
+        </div>
+
+        <div v-if="form.direction === 'in'" class="web-field">
+          <label for="web-entry-book">礼簿</label>
+          <select id="web-entry-book" v-model.number="form.bookId" class="web-select">
+            <option v-if="!books.length" :value="0">还没有礼簿，先去新建</option>
+            <option v-for="item in books" :key="item.id" :value="item.id">{{ item.name }}</option>
+          </select>
+        </div>
+        <div v-else class="web-field">
+          <label for="web-entry-matter">事情</label>
+          <input id="web-entry-matter" v-model="form.matter" class="web-input" maxlength="128" placeholder="如：张三升学酒" />
         </div>
 
         <div class="web-field-row">
           <div class="web-field">
-            <label for="web-entry-event">事项</label>
-            <div style="display: flex; gap: 8px">
-              <select id="web-entry-event" v-model.number="form.eventId" class="web-select" style="flex: 1">
-                <option v-for="item in eventOptions" :key="item.id" :value="item.id">{{ item.name }}</option>
-                <option :value="0">＋ 新建事项…</option>
-              </select>
-              <button class="web-btn web-btn--sm" type="button" @click="newEventOpen = true">新建</button>
-            </div>
+            <label for="web-entry-amount">金额（元）</label>
+            <input id="web-entry-amount" v-model="form.amountText" class="web-input" inputmode="decimal" placeholder="0" />
+            <div class="web-upper">{{ upper }}</div>
           </div>
           <div class="web-field">
-            <label for="web-entry-book">礼簿</label>
-            <select id="web-entry-book" v-model.number="form.bookId" class="web-select">
-              <option v-for="item in books" :key="item.id" :value="item.id">{{ item.name }}</option>
-            </select>
-          </div>
-        </div>
-
-        <div v-if="newEventOpen || form.eventId === 0" class="web-card" style="padding: 12px">
-          <div class="web-field-row">
-            <div class="web-field">
-              <label>新事项名称</label>
-              <input v-model="newEvent.name" class="web-input" placeholder="如：孙女结婚" />
-            </div>
-            <div class="web-field">
-              <label>类型</label>
-              <select v-model="newEvent.type" class="web-select">
-                <option value="wedding">红事</option>
-                <option value="funeral">白事</option>
-                <option value="fullmoon">满月</option>
-                <option value="housewarming">乔迁</option>
-                <option value="school">升学</option>
-                <option value="newyear">过年</option>
-                <option value="other">其他</option>
-              </select>
-            </div>
-          </div>
-          <div class="web-field" style="margin-top: 8px">
             <label>日期</label>
-            <input v-model="newEvent.date" class="web-input" type="date" />
-          </div>
-          <button class="web-btn web-btn--sm" type="button" style="margin-top: 10px" @click="addEvent">
-            新建并使用
-          </button>
-        </div>
-
-        <div class="web-field-row">
-          <div class="web-field">
-            <label>方向</label>
-            <div class="web-seg web-seg--dir">
-              <button
-                type="button"
-                data-v="in"
-                :class="{ 'web-seg__on': form.direction === 'in' }"
-                @click="chooseDirection('in')"
-              >
-                收礼
-              </button>
-              <button
-                type="button"
-                data-v="out"
-                :class="{ 'web-seg__on': form.direction === 'out' }"
-                @click="chooseDirection('out')"
-              >
-                送礼
-              </button>
-            </div>
-          </div>
-          <div class="web-field">
-            <label for="web-entry-kind">名目</label>
-            <select id="web-entry-kind" v-model="form.itemKind" class="web-select">
-              <option value="">按礼簿推断</option>
-              <option v-for="item in dictStore.itemKinds" :key="item.id" :value="item.code">
-                {{ item.label }}
-              </option>
-            </select>
-          </div>
-        </div>
-
-        <div class="web-field">
-          <label for="web-entry-amount">金额</label>
-          <div class="web-amount">
-            <input
-              id="web-entry-amount"
-              v-model="form.amountText"
-              class="web-input"
-              inputmode="decimal"
-              placeholder="0"
-            />
-          </div>
-          <div class="web-upper">{{ upper }}</div>
-        </div>
-
-        <div class="web-field-row">
-          <div class="web-field">
-            <label for="web-entry-gift">礼品（金额为 0 时必填）</label>
-            <input id="web-entry-gift" v-model="form.giftName" class="web-input" placeholder="如：被面一床" />
-          </div>
-          <div class="web-field">
-            <label for="web-entry-gv">礼品估价</label>
-            <input id="web-entry-gv" v-model="form.giftValueText" class="web-input" inputmode="decimal" placeholder="选填，计入统计" />
-          </div>
-        </div>
-
-        <div class="web-field-row">
-          <div class="web-field">
-            <label for="web-entry-date">日期</label>
-            <input id="web-entry-date" v-model="form.date" class="web-input" type="date" />
-          </div>
-          <div class="web-field">
-            <label for="web-entry-status">回礼状态</label>
-            <select id="web-entry-status" v-model="form.status" class="web-select">
-              <option v-for="item in statusOptions" :key="item.code" :value="item.code">{{ item.label }}</option>
-            </select>
+            <DateField v-model="form.date" />
           </div>
         </div>
 
         <div class="web-field">
           <label for="web-entry-note">备注</label>
-          <textarea id="web-entry-note" v-model="form.remark" class="web-textarea" rows="2" />
-        </div>
-        <div class="web-muted web-sm">
-          合计 {{ totalCent ? `¥${(totalCent / 100).toFixed(2)}` : '¥0' }}（金额 + 礼品估价）
+          <textarea
+            id="web-entry-note"
+            v-model="form.note"
+            class="web-textarea"
+            rows="2"
+            maxlength="256"
+            placeholder="礼品、火炮等补充信息"
+          />
         </div>
       </template>
     </form>
@@ -434,12 +323,46 @@ onMounted(() => {
         </button>
       </div>
       <button class="web-btn" type="button" @click="ui.close()">取消</button>
-      <button v-if="!recordId" class="web-btn" type="button" :disabled="saving" @click="save(true)">
-        保存并再记一笔
-      </button>
+      <button v-if="!recordId" class="web-btn" type="button" :disabled="saving" @click="save(true)">保存并再记一笔</button>
       <button class="web-btn web-btn--primary" type="button" :disabled="saving" @click="save(false)">
         {{ saving ? '保存中…' : '保存' }}
       </button>
     </div>
   </aside>
 </template>
+
+<style lang="scss" scoped>
+.entry-person {
+  position: relative;
+}
+
+.entry-suggest {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  padding: var(--sp-1) 0;
+}
+
+.entry-suggest__item {
+  display: flex;
+  justify-content: space-between;
+  padding: var(--sp-2) var(--sp-3);
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--c-primary-light);
+  }
+}
+
+.entry-candidates {
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+</style>

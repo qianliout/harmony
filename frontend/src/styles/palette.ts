@@ -23,34 +23,20 @@ export function avatarColor(id: number): { main: string; light: string } {
   return palette[names[Math.abs(id) % names.length]]
 }
 
-const SEALS: Record<string, { char: string; color: PaletteName }> = {
-  wedding: { char: '喜', color: 'cinnabar' },
-  funeral: { char: '奠', color: 'stone' },
-  fullmoon: { char: '满', color: 'rose' },
-  housewarming: { char: '迁', color: 'amber' },
-  school: { char: '学', color: 'indigo' },
-  newyear: { char: '年', color: 'gold' },
-  other: { char: '礼', color: 'stone' },
-}
-
-export function sealOf(type: string): { char: string; color: PaletteName } {
-  return SEALS[type] ?? SEALS.other
-}
-
-export const relations = [
-  { code: 'relative', label: '亲戚' },
-  { code: 'friend', label: '朋友' },
-  { code: 'colleague', label: '同事' },
-  { code: 'neighbor', label: '邻居' },
-  { code: 'other', label: '其他' },
-]
-
-export const eventTypes = [
-  { code: 'wedding', label: '红事', char: '喜', color: 'cinnabar' },
-  { code: 'funeral', label: '白事', char: '奠', color: 'stone' },
-  { code: 'fullmoon', label: '满月', char: '满', color: 'rose' },
-  { code: 'housewarming', label: '乔迁', char: '迁', color: 'amber' },
-  { code: 'school', label: '升学', char: '学', color: 'indigo' },
-  { code: 'newyear', label: '过年', char: '年', color: 'gold' },
-  { code: 'other', label: '其他', char: '礼', color: 'stone' },
+/** 礼簿种类：预置三类，前端允许输入自定义值。 */
+export const bookCategories = [
+  { code: 'renqing', label: '人情礼', color: 'cinnabar' },
+  { code: 'huopao', label: '火炮', color: 'amber' },
+  { code: 'other', label: '其他', color: 'stone' },
 ] as const
+
+const CATEGORY_COLORS: Record<string, PaletteName> = {
+  renqing: 'cinnabar',
+  huopao: 'amber',
+  other: 'stone',
+}
+
+/** 礼簿种类对应的取色名；自定义种类回落到 stone。 */
+export function bookCategoryColor(code: string): PaletteName {
+  return CATEGORY_COLORS[code] ?? 'stone'
+}

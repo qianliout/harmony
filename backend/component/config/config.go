@@ -16,8 +16,6 @@ type Config struct {
 	Database  DatabaseConfig  `yaml:"database"`
 	Storage   StorageConfig   `yaml:"storage"`
 	Recognize RecognizeConfig `yaml:"recognize"`
-	Auth      AuthConfig      `yaml:"auth"`
-	Wechat    WechatConfig    `yaml:"wechat"`
 	Backup    BackupConfig    `yaml:"backup"`
 }
 
@@ -46,21 +44,6 @@ type RecognizeConfig struct {
 	DailyLimit     int64   `yaml:"dailyLimit"`
 }
 
-type AuthConfig struct {
-	AdminUserIDs []uint64 `yaml:"adminUserIds"`
-	MPTokenDays  int64    `yaml:"mpTokenDays"`
-	WebTokenDays int64    `yaml:"webTokenDays"`
-	Secret       string   `yaml:"secret"`
-	// DevUserID 大于 0 时免登录：未带令牌的请求按该用户处理，只允许 debug 模式开启。
-	DevUserID uint64 `yaml:"devUserId"`
-}
-
-type WechatConfig struct {
-	AppID      string `yaml:"appID"`
-	AppSecret  string `yaml:"appSecret"`
-	EnvVersion string `yaml:"envVersion"`
-}
-
 type BackupConfig struct {
 	Dir      string `yaml:"dir"`
 	KeepDays int    `yaml:"keepDays"`
@@ -83,15 +66,6 @@ func Default() *Config {
 			Temperature:    0,
 			HighResolution: true,
 			DailyLimit:     100,
-		},
-		Auth: AuthConfig{
-			AdminUserIDs: []uint64{1},
-			MPTokenDays:  30,
-			WebTokenDays: 14,
-		},
-		Wechat: WechatConfig{
-			AppID:      "wx348e5ad03f9cd6ba",
-			EnvVersion: "develop",
 		},
 		Backup: BackupConfig{Dir: "data/backups", KeepDays: 7},
 	}
@@ -129,8 +103,7 @@ func (cfg *Config) Validate() error {
 	if strings.TrimSpace(cfg.Server.Host) == "" {
 		return fmt.Errorf("server host is empty")
 	}
-	portInRange := cfg.Server.Port > 0 && cfg.Server.Port <= 65535
-	if !portInRange {
+	if cfg.Server.Port <= 0 || cfg.Server.Port > 65535 {
 		return fmt.Errorf("server port must be in 1..65535, got %d", cfg.Server.Port)
 	}
 	if !consts.ValidServerMode(cfg.Server.Mode) {
@@ -147,15 +120,6 @@ func (cfg *Config) Validate() error {
 	}
 	if cfg.Recognize.DailyLimit < 0 {
 		return fmt.Errorf("recognize dailyLimit must be non-negative")
-	}
-	if cfg.Auth.MPTokenDays <= 0 || cfg.Auth.WebTokenDays <= 0 {
-		return fmt.Errorf("auth token days must be positive")
-	}
-	if cfg.Auth.DevUserID > 0 && cfg.Server.Mode != consts.ServerModeDebug {
-		return fmt.Errorf("auth devUserId is only allowed in debug mode")
-	}
-	if len(cfg.Auth.AdminUserIDs) == 0 {
-		cfg.Auth.AdminUserIDs = []uint64{1}
 	}
 	if cfg.Backup.KeepDays < 0 {
 		return fmt.Errorf("backup keepDays must be non-negative")
@@ -180,10 +144,6 @@ func applyEnv(cfg *Config) {
 		envStr("ALI_BAILIAN_API_KEY", &cfg.Recognize.APIKey)
 	}
 	envInt("HARMONY_RECOGNIZE_TIMEOUT_SECONDS", &cfg.Recognize.TimeoutSeconds)
-	envStr("HARMONY_AUTH_SECRET", &cfg.Auth.Secret)
-	envStr("HARMONY_WECHAT_APP_ID", &cfg.Wechat.AppID)
-	envStr("HARMONY_WECHAT_APP_SECRET", &cfg.Wechat.AppSecret)
-	envStr("HARMONY_WECHAT_ENV_VERSION", &cfg.Wechat.EnvVersion)
 	envStr("HARMONY_BACKUP_DIR", &cfg.Backup.Dir)
 }
 

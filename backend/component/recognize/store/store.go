@@ -1,98 +1,92 @@
 package store
 
 import (
+	"context"
+	"fmt"
 	"time"
 
-	"gorm.io/gorm"
-
+	modelfilter "harmony/infra/model/filter"
 	"harmony/infra/model/recognize"
+	"harmony/infra/rdb"
 )
 
-type Store struct{}
-
-func New() *Store { return &Store{} }
-
-func (s *Store) Create(db *gorm.DB, task *recognize.Task) error {
-	return db.Create(task).Error
+type RecognizeTaskDao struct {
+	db *rdb.RDB
 }
 
-func (s *Store) Get(db *gorm.DB, ownerID uint64, id uint64) (*recognize.Task, error) {
-	var task recognize.Task
-	if err := db.Where("owner_id = ? AND id = ?", ownerID, id).First(&task).Error; err != nil {
-		return nil, err
+func NewRecognizeTaskDao(db *rdb.RDB) *RecognizeTaskDao {
+	return &RecognizeTaskDao{db: db}
+}
+
+func (dal *RecognizeTaskDao) CreateRecognizeTask(ctx context.Context, data *recognize.RecognizeTask) error {
+	data = data.Serialize()
+	if err := data.Check(); err != nil {
+		return err
 	}
-	return &task, nil
-}
-
-// CountToday 统计当天、当前 owner、状态不为 failed 的任务数，用于每日识别上限。
-func (s *Store) CountToday(db *gorm.DB, ownerID uint64, since time.Time) (int64, error) {
-	var count int64
-	err := db.Model(&recognize.Task{}).
-		Where("owner_id = ? AND created_at >= ? AND status <> ?", ownerID, since, "failed").
-		Count(&count).Error
-	return count, err
-}
-
-func (s *Store) GetByID(db *gorm.DB, id uint64) (*recognize.Task, error) {
-	var task recognize.Task
-	if err := db.Where("id = ?", id).First(&task).Error; err != nil {
-		return nil, err
+	cancelCtx, cancelFunc := context.WithTimeout(ctx, time.Second*10)
+	defer cancelFunc()
+	db := dal.db.Get().WithContext(cancelCtx).Table(data.TableName())
+	if err := db.Create(data).Error; err != nil {
+		return err
 	}
-	return &task, nil
+	return nil
 }
 
-func (s *Store) List(db *gorm.DB, ownerID uint64, offset, limit int64) ([]recognize.Task, int64, error) {
-	query := db.Model(&recognize.Task{}).Where("owner_id = ?", ownerID)
+func (dal *RecognizeTaskDao) SearchRecognizeTask(ctx context.Context, param *recognize.SearchRecognizeTaskParam) ([]*recognize.RecognizeTask, int64, error) {
+	result := make([]*recognize.RecognizeTask, 0)
+	param = param.Serialize()
+	if err := param.Check(); err != nil {
+		return result, 0, err
+	}
+
+	cancelCtx, cancelFunc := context.WithTimeout(ctx, time.Second*3)
+	defer cancelFunc()
+
+	tb := (&recognize.RecognizeTask{}).TableName()
+	db := dal.db.Get().WithContext(cancelCtx).Table(tb)
+	// OwnerID 为 0 表示不限 owner，仅用于启动时清理残留任务。
+	if param.OwnerID > 0 {
+		db = db.Where("owner_id = ?", param.OwnerID)
+	}
+	if len(param.TaskIDs) > 0 {
+		db = db.Where("id IN ?", param.TaskIDs)
+	}
+	if len(param.Statuses) > 0 {
+		db = db.Where("status IN ?", param.Statuses)
+	}
+	if param.CreatedFrom > 0 {
+		db = db.Where("created_at >= ?", param.CreatedFrom)
+	}
+
 	var total int64
-	if err := query.Count(&total).Error; err != nil {
-		return nil, 0, err
+	if err := db.Count(&total).Error; err != nil {
+		return result, 0, err
 	}
-	items := make([]recognize.Task, 0)
-	if err := query.Order("created_at DESC, id DESC").Offset(int(offset)).Limit(int(limit)).Find(&items).Error; err != nil {
-		return nil, 0, err
+	// 增加 排序 / limit / offset
+	db = modelfilter.AddFilter(db, param.Filter)
+
+	if err := db.Find(&result).Error; err != nil {
+		return result, 0, err
 	}
-	return items, total, nil
+	for _, row := range result {
+		row.Deserialize()
+	}
+	return result, total, nil
 }
 
-func (s *Store) MarkRunning(db *gorm.DB, id uint64) error {
-	return db.Model(&recognize.Task{}).Where("id = ?", id).
-		Updates(map[string]any{"status": "running", "error_message": ""}).Error
-}
-
-func (s *Store) MarkSucceeded(db *gorm.DB, id uint64, itemsJSON string, raw string) error {
-	now := time.Now()
-	return db.Model(&recognize.Task{}).Where("id = ?", id).
-		Updates(map[string]any{
-			"status":        "succeeded",
-			"items":         itemsJSON,
-			"raw_response":  raw,
-			"error_message": "",
-			"finished_at":   now,
-		}).Error
-}
-
-func (s *Store) MarkFailed(db *gorm.DB, id uint64, message string, raw string) error {
-	now := time.Now()
-	return db.Model(&recognize.Task{}).Where("id = ?", id).
-		Updates(map[string]any{
-			"status":        "failed",
-			"error_message": message,
-			"raw_response":  raw,
-			"finished_at":   now,
-		}).Error
-}
-
-func (s *Store) MarkCommitted(db *gorm.DB, id uint64) error {
-	return db.Model(&recognize.Task{}).Where("id = ?", id).Update("committed", true).Error
-}
-
-// FailStale 在服务重启时把未完成的任务置为失败，提示用户重试。
-func (s *Store) FailStale(db *gorm.DB) error {
-	return db.Model(&recognize.Task{}).
-		Where("status IN ?", []string{"pending", "running"}).
-		Updates(map[string]any{
-			"status":        "failed",
-			"error_message": "服务重启，识别未完成，请重新上传",
-			"finished_at":   time.Now(),
-		}).Error
+func (dal *RecognizeTaskDao) UpdateRecognizeTask(ctx context.Context, id int64, updater map[string]any) error {
+	if id <= 0 {
+		return fmt.Errorf("id must be positive")
+	}
+	if len(updater) == 0 {
+		return fmt.Errorf("updater is empty")
+	}
+	cancelCtx, cancelFunc := context.WithTimeout(ctx, time.Second*3)
+	defer cancelFunc()
+	db := dal.db.Get().WithContext(cancelCtx).Table((&recognize.RecognizeTask{}).TableName())
+	db = db.Where("id = ?", id)
+	if err := db.Updates(updater).Error; err != nil {
+		return err
+	}
+	return nil
 }

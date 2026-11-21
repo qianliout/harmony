@@ -1,0 +1,65 @@
+- generic [ref=f1e7]:
+  - complementary [ref=f1e8]:
+    - generic [ref=f1e9]:
+      - generic [ref=f1e10]: 礼
+      - generic [ref=f1e11]:
+        - generic [ref=f1e12]: 人情账本
+        - text: 朱砂礼簿 · 网页版
+    - navigation [ref=f1e13]:
+      - generic [ref=f1e14] [cursor=pointer]: 总账
+      - generic [ref=f1e20] [cursor=pointer]: 礼簿
+      - generic [ref=f1e24] [cursor=pointer]: 亲友
+      - generic [ref=f1e29] [cursor=pointer]: 识别礼簿
+    - generic [ref=f1e32]:
+      - generic [ref=f1e33]: 本
+      - generic [ref=f1e34]:
+        - generic [ref=f1e35]: 本机用户
+        - generic [ref=f1e36]: 本机 Web 端
+  - generic [ref=f1e37]:
+    - banner [ref=f1e38]:
+      - generic [ref=f1e39]: 总账
+      - generic "快捷键 N" [ref=f1e41] [cursor=pointer]: 记一笔
+    - main [ref=f1e44]:
+      - generic [ref=f1e45]:
+        - generic [ref=f1e46]:
+          - generic [ref=f1e47]:
+            - heading "总账" [level=1] [ref=f1e48]
+            - generic [ref=f1e49]: 所有礼簿合并，收送都在这里
+          - generic [ref=f1e50]:
+            - generic [ref=f1e51] [cursor=pointer]: 识别礼簿
+            - generic [ref=f1e54] [cursor=pointer]: 记一笔
+        - generic [ref=f1e57]:
+          - generic [ref=f1e58]:
+            - generic [ref=f1e59]: ¥0
+            - generic [ref=f1e60]: 总收
+          - generic [ref=f1e61]:
+            - generic [ref=f1e62]: ¥0
+            - generic [ref=f1e63]: 总送
+          - generic [ref=f1e64]:
+            - generic [ref=f1e65]: 0 笔
+            - generic [ref=f1e66]: 笔数
+        - generic [ref=f1e67]:
+          - generic [ref=f1e68]:
+            - combobox "礼簿" [ref=f1e69]:
+              - option "全部礼簿" [selected]
+            - generic "关键词" [ref=f1e70]:
+              - generic [ref=f1e71]:
+                - generic: 亲友姓名、拼音、备注或事情
+                - textbox [ref=f1e72]
+            - generic "开始日期" [ref=f1e73]:
+              - textbox [ref=f1e75]
+            - generic [ref=f1e76]: 至
+            - generic "结束日期" [ref=f1e77]:
+              - textbox [ref=f1e79]
+            - generic [ref=f1e81]: 方向
+            - generic [ref=f1e82]:
+              - generic [ref=f1e83] [cursor=pointer]: 全部
+              - generic [ref=f1e84] [cursor=pointer]: 收
+              - generic [ref=f1e85] [cursor=pointer]: 送
+          - generic [ref=f1e86]: 没有符合条件的记录
+          - generic [ref=f1e87]:
+            - generic [ref=f1e88]: 0 笔
+            - generic [ref=f1e89]:
+              - generic "上一页" [ref=f1e90]
+              - generic [ref=f1e93]: 1 / 1
+              - generic "下一页" [ref=f1e94]

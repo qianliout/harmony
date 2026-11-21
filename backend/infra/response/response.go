@@ -51,33 +51,28 @@ func (e *ErrI18) Unwrap() error {
 	return e.Err
 }
 
-func NewErr(err error, zh, en string) *ErrI18 {
-	fallbackMsg := en
-	if fallbackMsg == "" {
-		fallbackMsg = zh
-	}
-	if err == nil {
-		err = errors.New(fallbackMsg)
-	}
-
+// NewErr 把请求解析或校验失败包装成 400；已是 *ErrI18 时原样返回。
+func NewErr(err error) *ErrI18 {
 	var errI18 *ErrI18
 	isI18 := errors.As(err, &errI18)
 	if isI18 {
 		return errI18
 	}
-
+	if err == nil {
+		err = errors.New(consts.RespMsgBadRequest)
+	}
 	return &ErrI18{
 		Code: int64(http.StatusBadRequest),
-		Msg:  zh,
+		Msg:  err.Error(),
 		Err:  err,
-		EN:   en,
-		ZH:   zh,
+		EN:   err.Error(),
+		ZH:   err.Error(),
 	}
 }
 
 type Option func(o *Body)
 
-func JsonOK(c *gin.Context, opts ...Option) {
+func JSONOK(c *gin.Context, opts ...Option) {
 	body := Body{
 		Code: int64(http.StatusOK),
 		Msg:  consts.RespMsgSuccess,
@@ -88,7 +83,7 @@ func JsonOK(c *gin.Context, opts ...Option) {
 	c.JSON(http.StatusOK, &body)
 }
 
-func JsonErr(c *gin.Context, err error) {
+func JSONError(c *gin.Context, err error) {
 	body := Body{
 		Code: int64(http.StatusInternalServerError),
 		Msg:  consts.RespMsgSystemError,
@@ -167,35 +162,20 @@ func WithItem(item any) Option {
 	}
 }
 
-func WithCustomField(key string, value any) Option {
-	return func(ev *Body) {
-		if ev.Custom == nil {
-			ev.Custom = make(map[string]any)
-		}
-		ev.Custom[key] = value
-	}
-}
-
-func WithTotal(n int64) Option {
+func WithTotalItems(n int64) Option {
 	return func(ev *Body) {
 		ev.Total = n
 	}
 }
 
-func WithPerPage(n int64) Option {
+func WithItemsPerPage(n int64) Option {
 	return func(ev *Body) {
 		ev.PerPage = n
 	}
 }
 
-func WithIndex(n int64) Option {
+func WithStartIndex(n int64) Option {
 	return func(ev *Body) {
 		ev.StartIndex = n
-	}
-}
-
-func WithCode(code int64) Option {
-	return func(ev *Body) {
-		ev.Code = code
 	}
 }

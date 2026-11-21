@@ -1,11 +1,9 @@
 // 统一请求封装：基于 uni.request，H5 与小程序共用。
 // 传输层恒为 HTTP 200，业务码在 body.code，成功为 200；其余业务码与网络错误统一转成 ApiError 抛出。
-// 令牌只存 storage；401 时由注册的处理器决定重登（小程序）或跳登录页（网页）。
 
 import type { ApiResponse, Page } from './types'
 
 export const CODE_OK = 200
-const TOKEN_KEY = 'harmony_token'
 
 // H5 走 Vite 代理的同源路径；小程序直连后端地址。平台差异只用条件编译表达，不做运行时判断。
 function resolveTarget(): { baseURL: string; platform: string } {
@@ -27,27 +25,6 @@ export function queryString(query?: object): string {
   return toQuery(query)
 }
 
-export function getToken(): string {
-  const value = uni.getStorageSync(TOKEN_KEY)
-  return typeof value === 'string' ? value : ''
-}
-
-export function setToken(token: string): void {
-  uni.setStorageSync(TOKEN_KEY, token)
-}
-
-export function clearToken(): void {
-  uni.removeStorageSync(TOKEN_KEY)
-}
-
-type UnauthorizedHandler = () => Promise<boolean> | boolean
-let unauthorizedHandler: UnauthorizedHandler | null = null
-
-/** 由 auth store 注册：返回 true 表示已重登，可以重放原请求。 */
-export function setUnauthorizedHandler(handler: UnauthorizedHandler | null): void {
-  unauthorizedHandler = handler
-}
-
 /** 业务错误：code 为后端业务码，网络失败时为 -1。 */
 export class ApiError extends Error {
   constructor(
@@ -67,9 +44,7 @@ async function send<T>(
   url: string,
   data?: object,
   query?: object,
-  retried = false,
 ): Promise<ApiResponse<T>> {
-  const token = getToken()
   const res = await new Promise<UniApp.RequestSuccessCallbackResult>((resolve, reject) => {
     uni.request({
       url: BASE_URL + url + toQuery(query),
@@ -78,7 +53,6 @@ async function send<T>(
       timeout: 20_000,
       header: {
         'X-Client-Platform': PLATFORM,
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       success: resolve,
       fail: () => reject(new ApiError(-1, '网络不太好，请重试')),
@@ -89,16 +63,6 @@ async function send<T>(
   if (!body || typeof body.code !== 'number') {
     const message = res.statusCode === 200 ? '服务返回格式异常' : `服务暂时不可用（HTTP ${res.statusCode}）`
     throw new ApiError(res.statusCode, message)
-  }
-  if (body.code === 401) {
-    clearToken()
-    if (!retried && unauthorizedHandler) {
-      const recovered = await unauthorizedHandler()
-      if (recovered) {
-        return send<T>(method, url, data, query, true)
-      }
-    }
-    throw new ApiError(body.code, body.msg || '请先登录', body.data, body.custom)
   }
   if (body.code !== CODE_OK) {
     throw new ApiError(body.code, body.msg || body.err, body.data, body.custom)
@@ -138,5 +102,5 @@ export function unwrapItem<T>(body: ApiResponse<T>): T {
 
 /** 展开列表响应；后端约定列表 data 为数组，空列表为 []。 */
 export function unwrapPage<T>(body: ApiResponse<T[]>): Page<T> {
-  return { items: body.data ?? [], total: body.totalItems, custom: body.custom }
+  return { items: body.data ?? [], total: body.totalItems }
 }

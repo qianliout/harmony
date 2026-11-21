@@ -14,6 +14,7 @@ const (
 	RespMsgSuccess      = "success"
 	RespMsgSystemError  = "系统错误"
 	RespMsgUnknownError = "未知错误"
+	RespMsgBadRequest   = "请求参数不正确"
 
 	RespErrWithItems = "WithItems expected array or slice"
 	RespErrWithItem  = "WithItem expected struct, struct pointer or map"
@@ -59,6 +60,4 @@ const (
 const (
 	LLMFence     = "```"
 	LLMFenceLang = "json"
-
-	EmptyJSONArray = "[]"
 )

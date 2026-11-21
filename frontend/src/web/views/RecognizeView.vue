@@ -1,1023 +1,300 @@
 <script setup lang="ts">
-// H5 桌面识别页：上传 → 识别中 → 核对 → 完成。
-// 只做流程编排与桌面布局；上传、进度、完成、原图与核对行状态全部复用 sub-recognize 的共享实现。
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+// 识别礼簿：上传照片 → 后台识别 → 逐条核对 → 选礼簿和方向后写入。仅 H5 编译。
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 
 import { fetchBooks } from '@/api/book'
-import { fetchEventDetail, fetchEvents, fetchRecentEvents } from '@/api/event'
-import { ApiError } from '@/api/http'
-import { commitRecognizeTask, fetchRecognizeTask, uploadRecognizeImage } from '@/api/recognize'
-import type { BookItem, EventItem, RecognizeCommitResult, RecognizeTask } from '@/api/types'
-import { useAuthStore } from '@/stores/auth'
+import { commitRecognizeTask, fetchRecognizeTask, recognizeImageURL, uploadRecognizeImage } from '@/api/recognize'
+import type { BookItem, Direction, RecognizeCommitResult, RecognizeTask } from '@/api/types'
 import { useWebUiStore } from '@/stores/web'
-import ImageViewer from '@/sub-recognize/components/ImageViewer.vue'
-import PageCheckBar from '@/sub-recognize/components/PageCheckBar.vue'
-import RecognizeDone from '@/sub-recognize/components/RecognizeDone.vue'
-import RecognizeProgress from '@/sub-recognize/components/RecognizeProgress.vue'
-import RecognizeUpload from '@/sub-recognize/components/RecognizeUpload.vue'
-import { useReviewState, type ReviewRow } from '@/sub-recognize/useReviewState'
-import { preciseDateLabel, todayString } from '@/utils/date'
-import { centToYuanText, formatCent, yuanToCent } from '@/utils/money'
-import Modal from '@/web/components/Modal.vue'
+import { todayString } from '@/utils/date'
+import { formatCent, yuanToCent } from '@/utils/money'
+import DateField from '@/web/components/DateField.vue'
 import PageHead from '@/web/components/PageHead.vue'
 import WebIcon from '@/web/components/WebIcon.vue'
 import WebReviewTable from '@/web/components/WebReviewTable.vue'
 import { goWeb } from '@/web/nav'
+import { rowProblem, toCommitItem, toReviewRows, type ReviewRow } from '@/web/recognize'
 
-type Step = 'upload' | 'recognizing' | 'review' | 'done'
+type Stage = 'upload' | 'recognizing' | 'review' | 'done'
 
-interface ItemError {
-  index: number
-  message: string
-}
-
-interface PageInstanceLike {
-  options?: Record<string, string | undefined>
-  $page?: { options?: Record<string, string | undefined> }
-}
-
-const STEPS = ['上传', '识别', '核对', '完成']
-const STEP_ORDER: Step[] = ['upload', 'recognizing', 'review', 'done']
 const POLL_INTERVAL_MS = 1500
-const POLL_LIMIT_SECONDS = 100
-const HOME_URL = '/pages/web/index'
-const HISTORY_URL = '/sub-web/recognize-history'
 
-const auth = useAuthStore()
 const ui = useWebUiStore()
-const review = useReviewState()
-
-const step = ref<Step>('upload')
-const stepIndex = computed(() => STEP_ORDER.indexOf(step.value))
-
-const books = ref<BookItem[]>([])
-const bookId = ref(0)
-const eventId = ref(0)
-const eventName = ref('')
-const direction = ref<'in' | 'out'>('in')
-const date = ref(todayString())
-const pageNo = ref('')
-const pageTotalText = ref('')
-
-const events = ref<EventItem[]>([])
-const recentEvents = ref<EventItem[]>([])
-const eventPicker = ref(false)
-const eventKeyword = ref('')
-const eventResults = ref<EventItem[]>([])
-const eventSearching = ref(false)
-
-const file = ref<File | null>(null)
-const previewUrl = ref('')
-const uploading = ref(false)
-const error = ref('')
+const stage = ref<Stage>('upload')
 const task = ref<RecognizeTask | null>(null)
-const elapsed = ref(0)
-const saving = ref(false)
-const doneResult = ref<RecognizeCommitResult | null>(null)
-const readonly = ref(false)
-const resumeLoading = ref(false)
-const resumeError = ref('')
+const rows = ref<ReviewRow[]>([])
+const books = ref<BookItem[]>([])
+const error = ref('')
+const dragOver = ref(false)
+const committing = ref(false)
+const result = ref<RecognizeCommitResult | null>(null)
+let pollTimer: ReturnType<typeof setTimeout> | undefined
 
-let pollTimer: ReturnType<typeof setInterval> | null = null
-let pollToken = 0
-let pollBusy = false
-let pollStarted = 0
-let flowToken = 0
-let eventTimer: ReturnType<typeof setTimeout> | null = null
-let eventSearchSeq = 0
-
-const imageUrl = computed(() => {
-  if (step.value === 'review' || step.value === 'done') {
-    return task.value?.imageUrl || previewUrl.value
-  }
-  return previewUrl.value || task.value?.imageUrl || ''
-})
-const pageTotalCent = computed(() => (pageTotalText.value ? yuanToCent(pageTotalText.value) : 0))
-const pageConsistent = computed(
-  () => pageTotalCent.value > 0 && pageTotalCent.value === review.selectedSumCent.value,
-)
-
-const pageMeta = computed(() => {
-  if (step.value === 'upload') {
-    return '一次一张：上传 → 识别 → 核对 → 写入；核对确认前不写入任何账目'
-  }
-  if (step.value === 'recognizing') {
-    return '识别通常需要 20–60 秒，最多等待 100 秒'
-  }
-  if (step.value === 'review') {
-    return readonly.value
-      ? '只读查看该任务；记录明细请在礼簿中查看'
-      : '标黄的行（同名、大小写不一致、字迹不清）必须逐条确认后才能写入'
-  }
-  return '写入完成，可继续识别下一张，或去礼簿查看'
+const settings = reactive({
+  direction: 'in' as Direction,
+  bookId: 0,
+  matter: '',
+  date: todayString(),
 })
 
-/** 行是否需要人工处理；与 useReviewState.needsConfirm 同口径，并额外要求未勾选的黄色行显式处理。 */
-function isUnresolved(row: ReviewRow): boolean {
-  const low = review.isLowConfidence(row)
-  if (!row.checked) {
-    return row.matchStatus === 'multiple' || row.amountMismatch || low
-  }
-  if (!row.name.trim()) return true
-  if (row.itemKind !== 'gift' && yuanToCent(row.amountText) <= 0) return true
-  if (row.matchStatus === 'multiple') return true
-  if (row.amountMismatch && !row.confirmed) return true
-  if (low && !row.confirmed) return true
-  return false
-}
-
-const unresolvedRows = computed(() => review.rows.value.filter(isUnresolved))
-const unresolvedCount = computed(() => unresolvedRows.value.length)
-
-const commitBlockReason = computed(() => {
-  if (readonly.value) return '只读查看，不能写入'
-  if (saving.value) return '正在写入…'
-  if (!task.value) return '没有可写入的识别任务'
-  if (!review.selectedRows.value.length) return '请至少勾选一条'
-  if (review.needPersonRows.value.length) return `还有 ${review.needPersonRows.value.length} 条需要选择亲友`
-  if (unresolvedCount.value) return `还有 ${unresolvedCount.value} 行待确认`
-  if (!bookId.value) return '先选择礼簿'
-  if (!eventId.value) return '先选择事项'
-  return ''
-})
-const canCommit = computed(() => !commitBlockReason.value)
-
-const writeLabel = computed(() => {
-  if (saving.value) return '写入中…'
-  if (unresolvedCount.value) return `还有 ${unresolvedCount.value} 行待确认`
-  if (!review.selectedRows.value.length) return '未勾选行'
-  return `写入 ${review.selectedRows.value.length} 条 · ${formatCent(review.selectedSumCent.value)}`
-})
-
-/** 读取页面查询参数；优先用 uni-app 页面 options，H5 刷新时退回 hash 查询串。 */
-function readPageQuery(): Record<string, string> {
-  const result: Record<string, string> = {}
-  const pages = getCurrentPages()
-  const current = pages[pages.length - 1] as unknown as PageInstanceLike | undefined
-  const options = current?.options ?? current?.$page?.options ?? {}
-  Object.entries(options).forEach(([key, value]) => {
-    if (value !== undefined && value !== null) result[key] = String(value)
-  })
-  if (Object.keys(result).length || typeof window === 'undefined') return result
-  const hash = window.location.hash
-  const queryIndex = hash.indexOf('?')
-  const search = queryIndex >= 0 ? hash.slice(queryIndex + 1) : window.location.search
-  new URLSearchParams(search).forEach((value, key) => {
-    result[key] = value
-  })
-  return result
-}
+const checkedRows = computed(() => rows.value.filter((row) => row.checked))
+const checkedSumCent = computed(() => checkedRows.value.reduce((sum, row) => sum + yuanToCent(row.amountText), 0))
+const blocking = computed(() => checkedRows.value.find((row) => rowProblem(row)) ?? null)
+const imageURL = computed(() => (task.value ? recognizeImageURL(task.value.id) : ''))
 
 function stopPolling(): void {
-  pollToken += 1
-  pollBusy = false
-  if (pollTimer) {
-    clearInterval(pollTimer)
-    pollTimer = null
-  }
+  if (pollTimer) clearTimeout(pollTimer)
+  pollTimer = undefined
 }
 
-function applyTaskContext(current: RecognizeTask): void {
-  if (current.page && !pageNo.value) {
-    pageNo.value = current.page
-  }
-  if (current.pageTotalCent > 0 && !pageTotalText.value) {
-    pageTotalText.value = centToYuanText(current.pageTotalCent)
-  }
-}
-
-function openTask(current: RecognizeTask): void {
-  applyTaskContext(current)
-  review.loadTask(current, { page: pageNo.value, direction: direction.value })
-  readonly.value = current.committed || readonly.value
-  date.value = review.rows.value[0]?.date ?? date.value
-  step.value = 'review'
-}
-
-async function pollOnce(id: number, token: number): Promise<void> {
-  if (pollBusy) return
-  pollBusy = true
-  try {
-    const current = await fetchRecognizeTask(id)
-    if (token !== pollToken) return
-    task.value = current
-    if (current.status === 'succeeded') {
-      stopPolling()
-      openTask(current)
-    } else if (current.status === 'failed') {
-      stopPolling()
-      error.value = current.errorMessage || '识别失败，请重试'
+function poll(id: number): void {
+  pollTimer = setTimeout(async () => {
+    try {
+      const latest = await fetchRecognizeTask(id)
+      task.value = latest
+      if (latest.status === 'succeeded') {
+        rows.value = toReviewRows(latest.items)
+        stage.value = 'review'
+        return
+      }
+      if (latest.status === 'failed') {
+        error.value = latest.errorMessage || '识别失败，请重新上传'
+        stage.value = 'upload'
+        return
+      }
+      poll(id)
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : '查询识别进度失败'
+      stage.value = 'upload'
     }
-  } catch (err) {
-    if (token === pollToken) {
-      stopPolling()
-      error.value = err instanceof Error ? err.message : '获取识别结果失败'
-    }
-  } finally {
-    if (token === pollToken) {
-      pollBusy = false
-    }
-  }
+  }, POLL_INTERVAL_MS)
 }
 
-function startPolling(id: number, offset = 0): void {
-  stopPolling()
-  const token = pollToken
-  pollStarted = Date.now() - offset * 1000
-  elapsed.value = offset
+async function upload(file: File | undefined): Promise<void> {
+  if (!file) return
   error.value = ''
-  step.value = 'recognizing'
-  const tick = (): void => {
-    if (token !== pollToken) return
-    elapsed.value = Math.floor((Date.now() - pollStarted) / 1000)
-    if (elapsed.value >= POLL_LIMIT_SECONDS) {
-      stopPolling()
-      error.value = '识别超过 100 秒仍未完成，请重试或改为手动录入'
-      return
-    }
-    void pollOnce(id, token)
-  }
-  pollTimer = setInterval(tick, POLL_INTERVAL_MS)
-  tick()
-}
-
-async function resumeTask(id: number, onlyRead: boolean): Promise<void> {
-  resumeLoading.value = true
-  resumeError.value = ''
-  readonly.value = onlyRead
+  stage.value = 'recognizing'
   try {
-    const current = await fetchRecognizeTask(id)
-    task.value = current
-    applyTaskContext(current)
-    if (current.status === 'succeeded') {
-      openTask(current)
-    } else if (current.status === 'failed') {
-      step.value = 'recognizing'
-      error.value = current.errorMessage || '识别失败，请重试'
-    } else {
-      startPolling(current.id)
-    }
-  } catch (err) {
-    resumeError.value = err instanceof Error ? err.message : '加载识别任务失败'
-  } finally {
-    resumeLoading.value = false
-  }
-}
-
-function onFileChange(payload: { file: File | null; previewUrl: string }): void {
-  if (previewUrl.value.startsWith('blob:') && previewUrl.value !== payload.previewUrl) {
-    URL.revokeObjectURL(previewUrl.value)
-  }
-  file.value = payload.file
-  previewUrl.value = payload.previewUrl
-}
-
-async function startRecognize(picked: File): Promise<void> {
-  if (uploading.value) return
-  if (!bookId.value) {
-    ui.toast('先选择这页属于哪本礼簿')
-    return
-  }
-  if (!eventId.value) {
-    ui.toast('先选择这页属于哪个事项')
-    openEventPicker()
-    return
-  }
-  const token = ++flowToken
-  uploading.value = true
-  error.value = ''
-  step.value = 'recognizing'
-  elapsed.value = 0
-  try {
-    const created = await uploadRecognizeImage(picked)
-    if (token !== flowToken) return
-    file.value = picked
+    const created = await uploadRecognizeImage(file)
     task.value = created
-    readonly.value = false
-    review.reset()
-    startPolling(created.id)
+    poll(created.id)
   } catch (err) {
-    if (token !== flowToken) return
-    step.value = 'upload'
     error.value = err instanceof Error ? err.message : '上传失败'
-  } finally {
-    uploading.value = false
+    stage.value = 'upload'
   }
 }
 
-function revokePreview(): void {
-  if (previewUrl.value.startsWith('blob:')) {
-    URL.revokeObjectURL(previewUrl.value)
-  }
-  previewUrl.value = ''
-}
-
-function resetToUpload(): void {
-  flowToken += 1
-  stopPolling()
-  revokePreview()
-  file.value = null
-  task.value = null
-  error.value = ''
-  elapsed.value = 0
-  doneResult.value = null
-  readonly.value = false
-  review.reset()
-  step.value = 'upload'
-}
-
-function retryRecognize(): void {
-  if (file.value) {
-    void startRecognize(file.value)
-    return
-  }
-  if (task.value && task.value.status !== 'failed') {
-    startPolling(task.value.id)
-    return
-  }
-  resetToUpload()
-}
-
-function restartRecognize(): void {
-  if (saving.value) return
-  const picked = file.value
-  if (!picked) {
-    resetToUpload()
-    return
-  }
-  void startRecognize(picked)
-}
-
-function toManualEntry(): void {
-  if (bookId.value) {
-    goWeb(`/sub-web/book?id=${bookId.value}&tab=cont`)
-    return
-  }
-  goWeb('/sub-web/books')
-}
-
-function nextPageLabel(value: string): string {
-  return value.replace(/(\d+)(?!.*\d)/, (match) => String(Number(match) + 1))
-}
-
-function continueNext(): void {
-  const nextPage = pageNo.value ? nextPageLabel(pageNo.value) : ''
-  resetToUpload()
-  pageNo.value = nextPage
-  pageTotalText.value = ''
-  date.value = todayString()
-}
-
-function viewRecords(): void {
-  if (bookId.value) {
-    goWeb(`/sub-web/book?id=${bookId.value}`)
-    return
-  }
-  goWeb('/sub-web/books')
-}
-
-async function loadBooks(): Promise<void> {
-  try {
-    books.value = await fetchBooks('normal')
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : '礼簿加载失败'
-  }
-  if (!bookId.value) {
-    bookId.value = books.value[0]?.id ?? 0
-  }
-  applyBookDefault()
-}
-
-async function loadEventOptions(): Promise<void> {
-  try {
-    events.value = (await fetchEvents({ pageSize: 100 })).items
-  } catch {
-    events.value = []
-  }
-}
-
-async function loadRecentEvents(): Promise<void> {
-  try {
-    recentEvents.value = await fetchRecentEvents(8)
-  } catch {
-    recentEvents.value = []
-  }
-}
-
-async function ensureEventOption(id: number, name: string): Promise<void> {
-  if (!id) return
-  if (events.value.some((item) => item.id === id)) {
-    eventName.value = events.value.find((item) => item.id === id)?.name ?? name
-    return
-  }
-  eventName.value = name
-  try {
-    const detail = await fetchEventDetail(id)
-    if (!events.value.some((item) => item.id === id)) {
-      events.value.unshift(detail)
-    }
-    eventName.value = detail.name
-  } catch {
-    // 事项详情取不到时保留名称，写入前仍可重新选择。
-  }
-}
-
-function applyBookDefault(): void {
-  if (eventId.value) return
-  const book = books.value.find((item) => item.id === bookId.value)
-  if (!book?.defaultEventId) return
-  eventId.value = book.defaultEventId
-  void ensureEventOption(book.defaultEventId, book.defaultEventName)
-}
-
-function setBookId(value: number): void {
-  bookId.value = value
-  applyBookDefault()
-}
-
-function onBookChange(event: Event): void {
-  setBookId(Number((event.target as HTMLSelectElement).value))
-}
-
-function onEventChange(event: Event): void {
-  const id = Number((event.target as HTMLSelectElement).value)
-  eventId.value = id
-  eventName.value = events.value.find((item) => item.id === id)?.name ?? ''
-}
-
-function onDateChange(event: Event): void {
-  const value = (event.target as HTMLInputElement).value || todayString()
-  date.value = value
-  review.rows.value.forEach((row) => {
-    row.date = value
+/** uni-app H5 会把模板里的 <input type="file"> 编译成文本输入组件，只能用原生 DOM 弹出文件选择。
+ * 输入框必须挂到文档上，部分浏览器对游离节点不派发 change。 */
+function pickFile(): void {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = 'image/jpeg,image/png'
+  input.style.display = 'none'
+  const cleanup = (): void => input.remove()
+  input.addEventListener('change', () => {
+    void upload(input.files?.[0])
+    cleanup()
   })
+  input.addEventListener('cancel', cleanup)
+  document.body.appendChild(input)
+  input.click()
 }
 
-function onPageChange(event: Event): void {
-  const value = (event.target as HTMLInputElement).value.trim()
-  const previous = pageNo.value
-  pageNo.value = value
-  review.rows.value.forEach((row) => {
-    if (!row.paperPage || row.paperPage === previous) {
-      row.paperPage = value
-    }
-  })
-}
-
-function onPageTotalInput(event: Event): void {
-  pageTotalText.value = (event.target as HTMLInputElement).value
-}
-
-function openEventPicker(): void {
-  eventPicker.value = true
-  eventKeyword.value = ''
-  eventResults.value = recentEvents.value
-  if (!eventResults.value.length) {
-    void searchEvents('')
-  }
-}
-
-function onEventKeywordInput(): void {
-  if (eventTimer) clearTimeout(eventTimer)
-  eventTimer = setTimeout(() => {
-    void searchEvents(eventKeyword.value)
-  }, 220)
-}
-
-async function searchEvents(keyword: string): Promise<void> {
-  const seq = ++eventSearchSeq
-  eventSearching.value = true
-  try {
-    const page = await fetchEvents({ keyword: keyword.trim() || undefined, pageSize: 30 })
-    if (seq !== eventSearchSeq) return
-    eventResults.value = page.items
-  } catch {
-    if (seq === eventSearchSeq) eventResults.value = []
-  } finally {
-    if (seq === eventSearchSeq) eventSearching.value = false
-  }
-}
-
-function chooseEvent(item: EventItem): void {
-  eventId.value = item.id
-  eventName.value = item.name
-  if (!events.value.some((event) => event.id === item.id)) {
-    events.value.unshift(item)
-  }
-  eventPicker.value = false
-}
-
-function focusCell(row: ReviewRow, field: 'name' | 'amount' | 'note' = 'name'): void {
-  review.activate(row)
-  nextTick(() => {
-    document.querySelector<HTMLInputElement>(`[data-cell="${row.key}:${field}"]`)?.focus()
-  })
-}
-
-function locateFirstUnresolved(): void {
-  const row = review.firstUnresolved.value ?? unresolvedRows.value[0]
-  if (!row) return
-  review.activate(row)
-  nextTick(() => {
-    document
-      .querySelector(`[data-row-key="${row.key}"]`)
-      ?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-    document.querySelector<HTMLInputElement>(`[data-cell="${row.key}:name"]`)?.focus()
-  })
-}
-
-function addRow(): void {
-  if (readonly.value) return
-  const row = review.appendRow({ page: pageNo.value, direction: direction.value })
-  focusCell(row)
-}
-
-function readItemErrors(custom: Record<string, unknown> | null | undefined): ItemError[] {
-  const raw = custom?.itemErrors
-  if (!Array.isArray(raw)) return []
-  const out: ItemError[] = []
-  raw.forEach((entry) => {
-    if (!entry || typeof entry !== 'object') return
-    if (!('index' in entry) || !('message' in entry)) return
-    const index = Number(entry.index)
-    const message = typeof entry.message === 'string' ? entry.message : ''
-    if (Number.isFinite(index) && message) {
-      out.push({ index, message })
-    }
-  })
-  return out
+function onDrop(event: DragEvent): void {
+  dragOver.value = false
+  void upload(event.dataTransfer?.files?.[0])
 }
 
 async function commit(): Promise<void> {
-  if (saving.value) return
-  const current = task.value
-  if (!current) return
-  if (commitBlockReason.value) {
-    ui.toast(commitBlockReason.value)
-    locateFirstUnresolved()
+  if (!task.value) return
+  error.value = ''
+  if (!checkedRows.value.length) {
+    error.value = '请至少勾选一条识别结果'
     return
   }
-  const selected = review.selectedRows.value
-  const items = review.buildCommitItems({
-    eventId: eventId.value,
-    bookId: bookId.value,
-    page: pageNo.value,
-  })
-  review.rows.value.forEach((row) => {
-    row.error = ''
-  })
-  saving.value = true
+  if (blocking.value) {
+    error.value = `第 ${blocking.value.seq} 行：${rowProblem(blocking.value)}`
+    return
+  }
+  if (settings.direction === 'in' && !settings.bookId) {
+    error.value = '收礼需要选择礼簿'
+    return
+  }
+  committing.value = true
   try {
-    const result = await commitRecognizeTask(
-      current.id,
-      items,
-      pageNo.value,
-      pageTotalCent.value > 0 ? pageTotalCent.value : null,
-      bookId.value,
-    )
-    doneResult.value = result
-    readonly.value = true
-    step.value = 'done'
+    result.value = await commitRecognizeTask({
+      id: task.value.id,
+      bookId: settings.direction === 'in' ? settings.bookId : 0,
+      direction: settings.direction,
+      matter: settings.direction === 'out' ? settings.matter.trim() : '',
+      occurredOn: settings.date,
+      items: checkedRows.value.map(toCommitItem),
+    })
     ui.markChanged()
-    ui.toast(`已写入 ${result.count} 条记录`)
+    stage.value = 'done'
   } catch (err) {
-    if (err instanceof ApiError) {
-      const itemErrors = readItemErrors(err.custom)
-      itemErrors.forEach((itemError) => {
-        const row = selected[itemError.index]
-        if (row) row.error = itemError.message
-      })
-      const first = itemErrors[0] ? selected[itemErrors[0].index] : undefined
-      if (first) focusCell(first)
-      ui.toast(itemErrors[0]?.message ?? err.message)
-    } else {
-      ui.toast(err instanceof Error ? err.message : '写入失败')
-    }
+    error.value = err instanceof Error ? err.message : '写入失败'
   } finally {
-    saving.value = false
+    committing.value = false
   }
 }
 
-watch(
-  [() => auth.ready, () => auth.isAdmin],
-  ([ready, isAdmin]) => {
-    if (ready && !isAdmin) {
-      ui.toast('识别礼簿仅管理员可用')
-      goWeb(HOME_URL)
-    }
-  },
-  { immediate: true },
-)
-
-onMounted(async () => {
-  const query = readPageQuery()
-  const taskId = Number(query.taskId ?? 0)
-  if (query.bookId) bookId.value = Number(query.bookId) || 0
-  if (query.direction === 'out') direction.value = 'out'
-  if (query.page) pageNo.value = query.page
-
-  await Promise.all([loadBooks(), loadEventOptions(), loadRecentEvents()])
-  if (query.eventId) {
-    eventId.value = Number(query.eventId) || 0
-    await ensureEventOption(eventId.value, eventName.value)
-  } else {
-    applyBookDefault()
-  }
-  if (taskId > 0) {
-    await resumeTask(taskId, String(query.readonly ?? '') === '1')
-  }
-})
-
-onUnmounted(() => {
+function restart(): void {
   stopPolling()
-  revokePreview()
-  if (eventTimer) clearTimeout(eventTimer)
+  task.value = null
+  rows.value = []
+  result.value = null
+  error.value = ''
+  stage.value = 'upload'
+}
+
+onMounted(() => {
+  fetchBooks()
+    .then((page) => {
+      books.value = page.items
+      settings.bookId = page.items[0]?.id ?? 0
+    })
+    .catch(() => {
+      books.value = []
+    })
 })
+
+onBeforeUnmount(stopPolling)
 </script>
 
 <template>
-  <div v-if="auth.ready && !auth.isAdmin" class="web-alert web-alert--warn">
-    识别礼簿仅管理员可用，正在返回工作台…
+  <PageHead title="识别礼簿" meta="上传一页礼簿照片，识别出姓名和金额，核对后写入">
+    <template #tools>
+      <div class="web-steps">
+        <span :class="stage === 'upload' ? 'web-steps__cur' : 'web-steps__done'"><i>1</i>上传</span>
+        <span class="web-steps__line" />
+        <span :class="{ 'web-steps__cur': stage === 'recognizing', 'web-steps__done': stage === 'review' || stage === 'done' }"><i>2</i>识别</span>
+        <span class="web-steps__line" />
+        <span :class="{ 'web-steps__cur': stage === 'review', 'web-steps__done': stage === 'done' }"><i>3</i>核对</span>
+        <span class="web-steps__line" />
+        <span :class="{ 'web-steps__cur': stage === 'done' }"><i>4</i>写入</span>
+      </div>
+    </template>
+  </PageHead>
+
+  <div v-if="error" class="web-alert web-alert--err">
+    <WebIcon name="alert" />
+    <span>{{ error }}</span>
   </div>
 
-  <template v-else>
-    <PageHead title="识别礼簿" :meta="pageMeta">
-      <template #tools>
-        <div class="web-steps">
-          <template v-for="(label, index) in STEPS" :key="label">
-            <span v-if="index" class="web-steps__line" />
-            <span :class="{ 'web-steps__done': index < stepIndex, 'web-steps__cur': index === stepIndex }">
-              <i>{{ index < stepIndex ? '✓' : index + 1 }}</i>
-              {{ label }}
-            </span>
-          </template>
-        </div>
-        <button class="web-btn" type="button" @click="goWeb(HISTORY_URL, 'push')">
-          <WebIcon name="list" :size="15" />
-          识别历史
-        </button>
-      </template>
-    </PageHead>
+  <div
+    v-if="stage === 'upload'"
+    class="web-drop rec-drop"
+    :class="{ 'web-drop--over': dragOver }"
+    role="button"
+    tabindex="0"
+    @click="pickFile"
+    @keydown.enter="pickFile"
+    @dragover.prevent="dragOver = true"
+    @dragleave="dragOver = false"
+    @drop.prevent="onDrop"
+  >
+    <WebIcon name="upload" :size="28" />
+    <b>点击选择或拖入礼簿照片</b>
+    <span class="web-muted web-sm">支持 jpg、png，不超过 5MB；一次一页</span>
+  </div>
 
-    <div v-if="resumeError" class="web-alert web-alert--err">{{ resumeError }}</div>
-    <div v-if="resumeLoading" class="web-empty">正在加载识别任务…</div>
+  <div v-else-if="stage === 'recognizing'" class="web-card web-empty">正在识别，通常需要十几秒…</div>
 
-    <template v-if="step === 'upload'">
-      <RecognizeUpload
-        :books="books"
-        :book-id="bookId"
-        :event-name="eventName"
-        :direction="direction"
-        :page-no="pageNo"
-        :page-total-text="pageTotalText"
-        :uploading="uploading"
-        :error="error"
-        :wide="true"
-        @update:book-id="setBookId"
-        @update:direction="direction = $event"
-        @update:page-no="pageNo = $event"
-        @update:page-total-text="pageTotalText = $event"
-        @pick-event="openEventPicker"
-        @create-book="goWeb('/sub-web/books', 'push')"
-        @file-change="onFileChange"
-        @start="startRecognize"
-      />
-    </template>
-
-    <template v-else-if="step === 'recognizing'">
-      <div class="web-card rec-progress">
-        <RecognizeProgress
-          :image-url="imageUrl"
-          :elapsed="elapsed"
-          :error="error"
-          @cancel="resetToUpload"
-          @retry="retryRecognize"
-          @manual="toManualEntry"
-        />
+  <div v-else-if="stage === 'review'" class="web-rec">
+    <div class="web-card web-photo">
+      <div class="web-photo__stage">
+        <img class="rec-image" :src="imageURL" alt="礼簿原图" />
       </div>
-    </template>
+      <span class="web-muted web-sm">识别 {{ task?.items.length ?? 0 }} 行，合计 {{ formatCent(task?.sumCent ?? 0) }}</span>
+    </div>
 
-    <template v-else-if="step === 'review'">
-      <div v-if="readonly" class="web-alert web-alert--info">
-        只读查看：该任务已写入，记录明细请在礼簿中查看。
-      </div>
-
-      <div class="web-rec">
-        <div class="web-card web-photo">
-          <div class="rec-viewer">
-            <ImageViewer :src="imageUrl" :task-id="task?.id ?? 0" />
-          </div>
-          <div class="web-sm web-muted">滚轮缩放、拖动平移、双击适应；旋转只影响查看，不会重新识别。</div>
-        </div>
-
-        <div class="rec-right">
-          <div class="web-card rec-ctx">
-            <div class="web-ctx">
-              <div class="web-field">
-                <label for="rec-book">写入礼簿</label>
-                <select
-                  id="rec-book"
-                  class="web-select rec-ctx__book"
-                  :value="String(bookId)"
-                  :disabled="readonly"
-                  @change="onBookChange"
-                >
-                  <option v-for="book in books" :key="book.id" :value="String(book.id)">{{ book.name }}</option>
-                </select>
-              </div>
-
-              <div class="web-field">
-                <label for="rec-event">事项</label>
-                <select
-                  id="rec-event"
-                  class="web-select rec-ctx__event"
-                  :value="String(eventId)"
-                  :disabled="readonly"
-                  @change="onEventChange"
-                >
-                  <option value="0">选择事项</option>
-                  <option v-for="event in events" :key="event.id" :value="String(event.id)">{{ event.name }}</option>
-                </select>
-                <button v-if="!readonly" class="web-btn web-btn--text web-btn--sm" type="button" @click="openEventPicker">
-                  查找
-                </button>
-              </div>
-
-              <div class="web-field">
-                <label for="rec-date">日期</label>
-                <input
-                  id="rec-date"
-                  class="web-input rec-ctx__date"
-                  type="date"
-                  :value="date"
-                  :disabled="readonly"
-                  @change="onDateChange"
-                />
-              </div>
-
-              <div class="web-field">
-                <label for="rec-page">纸本标记</label>
-                <input
-                  id="rec-page"
-                  class="web-input rec-ctx__page"
-                  type="text"
-                  :value="pageNo"
-                  :disabled="readonly"
-                  placeholder="如 21-30"
-                  @change="onPageChange"
-                />
-              </div>
-
-              <div class="web-field">
-                <label for="rec-total">本页合计</label>
-                <input
-                  id="rec-total"
-                  class="web-input rec-ctx__total"
-                  type="text"
-                  inputmode="decimal"
-                  :value="pageTotalText"
-                  :disabled="readonly"
-                  placeholder="纸本页脚合计"
-                  @input="onPageTotalInput"
-                />
-              </div>
-            </div>
-
-            <div class="rec-ctx__check">
-              <PageCheckBar
-                :review="review"
-                :page-total-cent="pageTotalCent"
-                :page-consistent="pageConsistent"
-                :readonly="readonly"
-                @locate="locateFirstUnresolved"
-              />
-            </div>
-          </div>
-
-          <div class="web-card rec-review">
-            <WebReviewTable :review="review" :readonly="readonly" />
-
-            <div class="web-sumbar">
-              <button v-if="!readonly" class="web-btn web-btn--text web-btn--sm" type="button" @click="addRow">
-                <WebIcon name="plus" :size="14" />
-                添加一行
-              </button>
-              <span class="web-sm web-muted">
-                {{ review.rows.value.length }} 行 · 已选 {{ review.selectedRows.value.length }} 条 ·
-                {{ formatCent(review.selectedSumCent.value) }}
-              </span>
-              <div class="rec-foot">
-                <span v-if="!readonly && !canCommit" class="web-sm web-muted rec-foot__reason">
-                  {{ commitBlockReason }}
-                </span>
-                <template v-if="!readonly">
-                  <button class="web-btn" type="button" :disabled="saving" @click="restartRecognize">
-                    重新识别
-                  </button>
-                  <button
-                    class="web-btn web-btn--primary"
-                    type="button"
-                    :disabled="!canCommit"
-                    :title="commitBlockReason"
-                    @click="commit"
-                  >
-                    {{ writeLabel }}
-                  </button>
-                </template>
-                <button v-else class="web-btn" type="button" @click="viewRecords">查看礼簿记录</button>
-              </div>
-            </div>
+    <div class="rec-review">
+      <div class="web-card rec-settings">
+        <div class="web-field">
+          <label>方向</label>
+          <div class="web-seg web-seg--dir">
+            <button type="button" data-v="in" :class="{ 'web-seg__on': settings.direction === 'in' }" @click="settings.direction = 'in'">收</button>
+            <button type="button" data-v="out" :class="{ 'web-seg__on': settings.direction === 'out' }" @click="settings.direction = 'out'">送</button>
           </div>
         </div>
-      </div>
-    </template>
-
-    <template v-else>
-      <div class="web-card rec-done">
-        <RecognizeDone :result="doneResult" @view="viewRecords" @next="continueNext" />
-      </div>
-    </template>
-
-    <div v-if="eventPicker" class="web-mask" @click="eventPicker = false" />
-    <Modal v-if="eventPicker" title="选择事项" @close="eventPicker = false">
-      <div class="ev-search">
-        <input
-          v-model="eventKeyword"
-          class="web-input"
-          type="search"
-          placeholder="输入事项名称查找"
-          @input="onEventKeywordInput"
-        />
-      </div>
-      <div class="ev-list">
-        <button
-          v-for="item in eventResults"
-          :key="item.id"
-          class="ev-item"
-          type="button"
-          @click="chooseEvent(item)"
-        >
-          <span class="ev-item__name">{{ item.name }}</span>
-          <small class="ev-item__meta">
-            {{ item.typeLabel }}
-            <template v-if="item.eventDate"> · {{ preciseDateLabel(item.eventDate, item.datePrecision) }}</template>
-          </small>
-        </button>
-        <div v-if="!eventResults.length" class="web-empty">
-          {{ eventSearching ? '正在查找…' : '没有找到事项' }}
+        <div v-if="settings.direction === 'in'" class="web-field">
+          <label for="rec-book">写入礼簿</label>
+          <select id="rec-book" v-model.number="settings.bookId" class="web-select">
+            <option v-if="!books.length" :value="0">还没有礼簿，先去新建</option>
+            <option v-for="book in books" :key="book.id" :value="book.id">{{ book.name }}</option>
+          </select>
+        </div>
+        <div v-else class="web-field">
+          <label for="rec-matter">事情</label>
+          <input id="rec-matter" v-model="settings.matter" class="web-input" maxlength="128" placeholder="如：张三升学酒" />
+        </div>
+        <div class="web-field">
+          <label>日期</label>
+          <DateField v-model="settings.date" />
         </div>
       </div>
-    </Modal>
-  </template>
+
+      <div class="web-card">
+        <WebReviewTable :rows="rows" />
+        <div class="web-sumbar">
+          <span>已勾选 {{ checkedRows.length }} / {{ rows.length }} 行</span>
+          <span>合计 <b class="web-amt web-amt--in">{{ formatCent(checkedSumCent) }}</b></span>
+          <span class="web-filters__gap" />
+          <button class="web-btn" type="button" @click="restart">重新上传</button>
+          <button class="web-btn web-btn--primary" type="button" :disabled="committing" @click="commit">
+            {{ committing ? '写入中…' : '写入记录' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div v-else class="web-card rec-done">
+    <WebIcon name="check" :size="28" />
+    <b>已写入 {{ result?.count ?? 0 }} 条记录，合计 {{ formatCent(result?.sumCent ?? 0) }}</b>
+    <span v-if="result?.newPersons" class="web-muted">其中新建亲友 {{ result.newPersons }} 位</span>
+    <div class="rec-done__acts">
+      <button class="web-btn" type="button" @click="restart">再识别一页</button>
+      <button class="web-btn web-btn--primary" type="button" @click="goWeb('/pages/web/index')">去总账查看</button>
+    </div>
+  </div>
 </template>
 
 <style lang="scss" scoped>
-.rec-progress {
-  max-width: 560px;
-  width: 100%;
-  margin: 0 auto;
-  padding: var(--sp-6);
+.rec-drop {
+  cursor: pointer;
 }
 
-.rec-done {
-  max-width: 640px;
-  margin: 0 auto;
-}
-
-.rec-ctx {
-  position: sticky;
-  top: var(--top-h);
-  z-index: 10;
-  overflow: hidden;
-}
-
-/* 核对区表格压成 6 列后，右侧给到 60%；低于 1180px 直接上下排列，避免列被挤窄。 */
-.web-rec {
-  grid-template-columns: minmax(0, 40fr) minmax(0, 60fr);
-}
-
-@media (max-width: 1180px) {
-  .web-rec {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-.rec-ctx__book {
-  min-width: 180px;
-}
-
-.rec-ctx__event {
-  min-width: 200px;
-}
-
-.rec-ctx__date {
-  width: 156px;
-}
-
-.rec-ctx__page {
-  width: 120px;
-}
-
-.rec-ctx__total {
-  width: 130px;
-  font-family: $font-num;
-}
-
-.rec-ctx__check {
-  padding: var(--sp-3) var(--sp-4);
-}
-
-.rec-viewer {
-  height: min(62vh, 620px);
-  min-height: 360px;
-}
-
-.rec-right {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-4);
-  min-width: 0;
+.rec-image {
+  max-width: 100%;
+  max-height: 70vh;
 }
 
 .rec-review {
   display: flex;
   flex-direction: column;
-  min-width: 0;
+  gap: var(--sp-4);
 }
 
-.rec-review .web-sumbar {
-  position: sticky;
-  bottom: 0;
-  z-index: 5;
-  background: var(--c-surface);
+.rec-settings {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-4);
+  padding: var(--sp-4);
 }
 
-.rec-review .web-sumbar {
-  gap: var(--sp-3);
-}
-
-.rec-foot {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  margin-left: auto;
-}
-
-.rec-foot__reason {
-  max-width: 240px;
-  line-height: 16px;
-  text-align: right;
-}
-
-.rec-foot .web-btn--primary {
-  min-width: 180px;
-}
-
-.ev-search {
-  padding-bottom: var(--sp-2);
-}
-
-.ev-search .web-input {
-  width: 100%;
-}
-
-.ev-list {
+.rec-done {
   display: flex;
   flex-direction: column;
-  max-height: 46vh;
-  overflow-y: auto;
-  border-radius: var(--r-s);
-  background: var(--c-fill);
-}
-
-.ev-item {
-  display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--sp-3);
-  padding: 9px var(--sp-3);
-  border: 0;
-  border-bottom: 1px solid var(--c-divider);
-  background: transparent;
-  text-align: left;
+  padding: var(--sp-8) var(--sp-6);
 }
 
-.ev-item:last-child {
-  border-bottom: 0;
-}
-
-.ev-item:hover {
-  background: var(--c-surface);
-}
-
-.ev-item__name {
-  flex: 1;
-  min-width: 0;
-  font-size: 14px;
-}
-
-.ev-item__meta {
-  flex: none;
-  color: var(--c-ink-3);
-  font-size: 12px;
+.rec-done__acts {
+  display: flex;
+  gap: var(--sp-3);
 }
 </style>

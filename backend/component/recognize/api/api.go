@@ -1,123 +1,133 @@
 package api
 
 import (
-	"path/filepath"
-	"strings"
+	"io"
 
 	"github.com/gin-gonic/gin"
 
 	"harmony/component/recognize/service"
+	"harmony/infra/consts"
+	"harmony/infra/logger"
+	"harmony/infra/middleware"
 	"harmony/infra/model/recognize"
 	"harmony/infra/response"
 	"harmony/infra/utils"
 )
 
 type RecognizeAPI struct {
-	srv *service.RecognizeSrv
+	recognizeSrv *service.RecognizeSrv
+	log          *logger.Logger
 }
 
-func NewRecognizeAPI(srv *service.RecognizeSrv) *RecognizeAPI {
-	return &RecognizeAPI{srv: srv}
+func NewRecognizeAPI(recognizeSrv *service.RecognizeSrv) *RecognizeAPI {
+	api := RecognizeAPI{
+		recognizeSrv: recognizeSrv,
+		log: logger.New(
+			logger.WithModule("recognize"),
+			logger.WithSubModule("api"),
+		),
+	}
+	return &api
 }
 
-func (a *RecognizeAPI) CreateTask(c *gin.Context) {
-	header, err := c.FormFile("image")
+// CreateRecognizeTask 接收 multipart 表单里的 image 文件；文件上传无法走 JSON body，是 POST 规则的唯一例外。
+func (api *RecognizeAPI) CreateRecognizeTask(ctx *gin.Context) {
+	header, err := ctx.FormFile("image")
 	if err != nil {
-		response.JsonErr(c, response.BadRequest("请选择礼簿照片", "image is required"))
+		response.JSONError(ctx, response.BadRequest("请选择礼簿照片", "image is required"))
 		return
 	}
 	file, err := header.Open()
 	if err != nil {
-		response.JsonErr(c, response.BadRequest("读取图片失败", "open image failed"))
+		response.JSONError(ctx, response.BadRequest("读取图片失败", "open image failed"))
 		return
 	}
 	defer func() { _ = file.Close() }()
-	task, err := a.srv.CreateTask(c.Request.Context(), file)
+	// 多读 1 字节，超限时交给 Check 拒绝。
+	data, err := io.ReadAll(io.LimitReader(file, consts.RecognizeImageMaxSize+1))
 	if err != nil {
-		response.JsonErr(c, err)
+		response.JSONError(ctx, response.BadRequest("读取图片失败", "read image failed"))
 		return
 	}
-	response.JsonOK(c, response.WithItem(task))
-}
 
-func (a *RecognizeAPI) Detail(c *gin.Context) {
-	id := utils.GetInt64FromQuery(c, "id")
-	if id <= 0 {
-		response.JsonErr(c, response.BadRequest("缺少识别任务 id", "missing id"))
+	param := &recognize.CreateRecognizeTaskParam{
+		OwnerID:   middleware.OwnerID(ctx.Request.Context()),
+		ImageData: data,
+	}
+	param = param.Serialize()
+	if err := param.Check(); err != nil {
+		response.JSONError(ctx, response.NewErr(err))
 		return
 	}
-	task, err := a.srv.Detail(c.Request.Context(), uint64(id))
+	item, err := api.recognizeSrv.CreateRecognizeTask(ctx.Request.Context(), param)
 	if err != nil {
-		response.JsonErr(c, err)
+		response.JSONError(ctx, err)
 		return
 	}
-	response.JsonOK(c, response.WithItem(task))
+	response.JSONOK(ctx, response.WithItem(item))
 }
 
-func (a *RecognizeAPI) List(c *gin.Context) {
-	page := utils.GetInt64FromQuery(c, "page")
-	pageSize := utils.GetInt64FromQuery(c, "pageSize")
-	items, total, err := a.srv.List(c.Request.Context(), page, pageSize)
+func (api *RecognizeAPI) GetRecognizeTask(ctx *gin.Context) {
+	param := &recognize.GetRecognizeTaskParam{
+		ID:      utils.GetInt64FromQuery(ctx, "id"),
+		OwnerID: middleware.OwnerID(ctx.Request.Context()),
+	}
+	param = param.Serialize()
+	if err := param.Check(); err != nil {
+		response.JSONError(ctx, response.NewErr(err))
+		return
+	}
+	item, err := api.recognizeSrv.GetRecognizeTask(ctx.Request.Context(), param)
 	if err != nil {
-		response.JsonErr(c, err)
+		response.JSONError(ctx, err)
 		return
 	}
-	response.JsonOK(c,
-		response.WithItems(items),
-		response.WithTotal(total),
-		response.WithPerPage(pageSize),
-	)
+	response.JSONOK(ctx, response.WithItem(item))
 }
 
-func (a *RecognizeAPI) Image(c *gin.Context) {
-	id := utils.GetInt64FromQuery(c, "id")
-	expires := utils.GetInt64FromQuery(c, "exp")
-	sig := utils.GetStrFromQuery(c, "sig")
-	if id <= 0 || expires <= 0 || sig == "" {
-		response.JsonErr(c, response.New(403, "原图链接无效", "invalid image link"))
+// GetRecognizeImage 直接返回原图文件，供核对页对照。
+func (api *RecognizeAPI) GetRecognizeImage(ctx *gin.Context) {
+	param := &recognize.GetRecognizeTaskParam{
+		ID:      utils.GetInt64FromQuery(ctx, "id"),
+		OwnerID: middleware.OwnerID(ctx.Request.Context()),
+	}
+	param = param.Serialize()
+	if err := param.Check(); err != nil {
+		response.JSONError(ctx, response.NewErr(err))
 		return
 	}
-	relative, err := a.srv.LoadImage(c.Request.Context(), uint64(id), expires, sig)
+	path, err := api.recognizeSrv.ResolveRecognizeImage(ctx.Request.Context(), param)
 	if err != nil {
-		response.JsonErr(c, err)
+		response.JSONError(ctx, err)
 		return
 	}
-	root := filepath.Clean(a.srv.UploadDir())
-	target := filepath.Clean(filepath.Join(root, relative))
-	if !strings.HasPrefix(target, root+string(filepath.Separator)) {
-		response.JsonErr(c, response.New(403, "原图路径无效", "invalid image path"))
-		return
-	}
-	c.Header("Cache-Control", "private, max-age=3600")
-	c.File(target)
+	ctx.Header("Cache-Control", "private, max-age=3600")
+	ctx.File(path)
 }
 
-func (a *RecognizeAPI) Commit(c *gin.Context) {
-	id := utils.GetInt64FromQuery(c, "id")
-	if id <= 0 {
-		response.JsonErr(c, response.BadRequest("缺少识别任务 id", "missing id"))
+func (api *RecognizeAPI) CommitRecognizeTask(ctx *gin.Context) {
+	param := &recognize.CommitRecognizeTaskParam{}
+	if err := ctx.ShouldBindJSON(param); err != nil {
+		response.JSONError(ctx, response.NewErr(err))
 		return
 	}
-	var param recognize.CommitParam
-	if err := c.ShouldBindJSON(&param); err != nil {
-		response.JsonErr(c, response.BadRequest("提交的数据格式不正确", "invalid request body"))
+	param.OwnerID = middleware.OwnerID(ctx.Request.Context())
+	param = param.Serialize()
+	if err := param.Check(); err != nil {
+		response.JSONError(ctx, response.NewErr(err))
 		return
 	}
-	result, err := a.srv.Commit(c.Request.Context(), uint64(id), param)
+	item, err := api.recognizeSrv.CommitRecognizeTask(ctx.Request.Context(), param)
 	if err != nil {
-		response.JsonErr(c, err)
+		response.JSONError(ctx, err)
 		return
 	}
-	response.JsonOK(c, response.WithItem(result))
+	response.JSONOK(ctx, response.WithItem(item))
 }
 
-func RegisterPublicRoutes(group *gin.RouterGroup, api *RecognizeAPI) {
-	group.GET("/recognize/tasks/image", api.Image)
-}
-
-func RegisterRoutes(group *gin.RouterGroup, api *RecognizeAPI) {
-	group.POST("/recognize/tasks", api.CreateTask)
-	group.GET("/recognize/tasks", api.List)
-	group.GET("/recognize/tasks/detail", api.Detail)
-	group.POST("/recognize/tasks/commit", api.Commit)
+func RegisterRoutes(group *gin.RouterGroup, recognizeAPI *RecognizeAPI) {
+	group.POST("/recognize/tasks", recognizeAPI.CreateRecognizeTask)
+	group.GET("/recognize/tasks/detail", recognizeAPI.GetRecognizeTask)
+	group.GET("/recognize/tasks/image", recognizeAPI.GetRecognizeImage)
+	group.POST("/recognize/tasks/commit", recognizeAPI.CommitRecognizeTask)
 }

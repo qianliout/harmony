@@ -2,10 +2,10 @@ package service
 
 import (
 	"bytes"
-	"errors"
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"harmony/component/config"
-	"harmony/infra/model/recognize"
 	"harmony/infra/utils"
 )
 
@@ -23,18 +22,21 @@ type Image struct {
 	MIME string
 }
 
-type Result struct {
-	Model     string
-	Raw       string
-	Items     []recognize.ProviderItem
-	Page      string
-	PageTotal *float64
+// ProviderItem 是模型输出的一行，字段与提示词约定的 JSON 一致；金额与置信度沿用模型的浮点输出。
+type ProviderItem struct {
+	Seq        int64   `json:"seq"`
+	Name       string  `json:"name"`
+	Amount     float64 `json:"amount"`
+	Note       string  `json:"note"`
+	Raw        string  `json:"raw"`
+	Confidence float64 `json:"confidence"`
 }
 
-// Recognizer 把一张礼簿照片识别成候选记录，实现方负责调用具体厂商。
-type Recognizer interface {
-	Recognize(ctx context.Context, img Image) (*Result, error)
-	Name() string
+// Result 是模型返回的结构化结果。
+type Result struct {
+	Model string
+	Raw   string
+	Items []ProviderItem
 }
 
 const recognizePrompt = `你是礼簿录入助手。图片是一页中文人情礼簿，可能旋转了 90 度，请先按文字方向理解版面。
@@ -53,7 +55,6 @@ const recognizePrompt = `你是礼簿录入助手。图片是一页中文人情�
 一行里出现两个金额时，按"大写在前、小写在后"的书写习惯分别填入 amountUpper 和 amountLower。`
 
 type OpenAICompatRecognizer struct {
-	provider       string
 	baseURL        string
 	apiKey         string
 	model          string
@@ -68,7 +69,6 @@ func NewOpenAICompatRecognizer(cfg config.RecognizeConfig) *OpenAICompatRecogniz
 		timeout = 90 * time.Second
 	}
 	return &OpenAICompatRecognizer{
-		provider:       cfg.Provider,
 		baseURL:        strings.TrimRight(cfg.BaseURL, "/"),
 		apiKey:         cfg.APIKey,
 		model:          cfg.Model,
@@ -76,10 +76,6 @@ func NewOpenAICompatRecognizer(cfg config.RecognizeConfig) *OpenAICompatRecogniz
 		highResolution: cfg.HighResolution,
 		client:         &http.Client{Timeout: timeout},
 	}
-}
-
-func (r *OpenAICompatRecognizer) Name() string {
-	return r.provider
 }
 
 type chatRequest struct {
@@ -249,12 +245,10 @@ func (r *OpenAICompatRecognizer) call(ctx context.Context, body []byte) (*Result
 	content := choice.Message.Content
 
 	var objectResult struct {
-		Page      string                   `json:"page"`
-		PageTotal *float64                 `json:"pageTotal"`
-		Items     []recognize.ProviderItem `json:"items"`
+		Items []ProviderItem `json:"items"`
 	}
 	if err := utils.UnmarshalLLMJSON(content, &objectResult); err != nil {
-		var items []recognize.ProviderItem
+		var items []ProviderItem
 		if errArray := utils.UnmarshalLLMJSON(content, &items); errArray != nil {
 			return nil, fmt.Errorf("识别结果格式异常: %w", err)
 		}
@@ -264,12 +258,10 @@ func (r *OpenAICompatRecognizer) call(ctx context.Context, body []byte) (*Result
 	if model == "" {
 		model = r.model
 	}
-	return &Result{
-		Model:     model,
-		Raw:       content,
-		Items:     objectResult.Items,
-		Page:      objectResult.Page,
-		PageTotal: objectResult.PageTotal,
-	}, nil
+	result := &Result{
+		Model: model,
+		Raw:   content,
+		Items: objectResult.Items,
+	}
+	return result, nil
 }
-

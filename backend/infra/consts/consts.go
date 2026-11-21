@@ -25,6 +25,5 @@ func ValidServerMode(mode string) bool {
 	return false
 }
 
-
 // TimestampMilliThreshold 区分秒级与毫秒级时间戳：低于它的正值是统一毫秒前存下的秒级值。
 const TimestampMilliThreshold int64 = 1_000_000_000_000

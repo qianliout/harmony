@@ -1,116 +1,20 @@
 <script setup lang="ts">
-// 桌面识别核对表：与窄屏 ReviewTable 共用 useReviewState，只替换成原生 table 与横向滚动。
-// 标黄行（同名待选、大小写不一致、字迹不清、缺姓名/金额）必须勾选确认后才会放行写入。
-import {
-  ITEM_KIND_OPTIONS,
-  type ReviewRow,
-  type ReviewState,
-} from '@/sub-recognize/useReviewState'
-import { formatCent, yuanToCent } from '@/utils/money'
+// 识别核对表：确认、姓名（含序号与亲友匹配）、金额（大写在下）、备注四列。
+import { centToChinese } from '@/utils/chinese-amount'
+import { yuanToCent } from '@/utils/money'
+import { LOW_CONFIDENCE, rowProblem, type ReviewRow } from '@/web/recognize'
 
-import WebIcon from './WebIcon.vue'
 import WebTable from './WebTable.vue'
 
-const props = withDefaults(
-  defineProps<{
-    review: ReviewState
-    readonly?: boolean
-  }>(),
-  { readonly: false },
-)
+defineProps<{ rows: ReviewRow[] }>()
 
-interface FlagView {
-  key: string
-  label: string
-  tone: 'warn' | 'info' | 'muted'
+function upperOf(row: ReviewRow): string {
+  const cent = yuanToCent(row.amountText)
+  return cent > 0 ? centToChinese(cent) : ''
 }
 
-/** 把原生 input/select 事件包装成 useReviewState 期望的 detail.value 形状。 */
-function asDetail(event: Event): Event {
-  const target = event.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | null
-  return { detail: { value: target?.value ?? '' } } as unknown as Event
-}
-
-/** 这一行是否需要人工确认：同名、大小写不一致、低置信度、缺姓名或金额。 */
-function isFlagged(row: ReviewRow): boolean {
-  return (
-    row.matchStatus === 'multiple' ||
-    row.amountMismatch ||
-    props.review.isLowConfidence(row) ||
-    !row.name.trim() ||
-    (row.itemKind !== 'gift' && yuanToCent(row.amountText) <= 0)
-  )
-}
-
-/** 待确认：缺姓名/金额、同名、大小写不一致或低置信度，且尚未勾选确认。 */
-function isPending(row: ReviewRow): boolean {
-  const low = props.review.isLowConfidence(row)
-  if (!row.checked) {
-    return row.matchStatus === 'multiple' || row.amountMismatch || low
-  }
-  if (!row.name.trim()) return true
-  if (row.itemKind !== 'gift' && yuanToCent(row.amountText) <= 0) return true
-  if (row.matchStatus === 'multiple') return true
-  if (row.amountMismatch && !row.confirmed) return true
-  if (low && !row.confirmed) return true
-  return false
-}
-
-function flagsOf(row: ReviewRow): FlagView[] {
-  const out: FlagView[] = []
-  if (row.duplicate) out.push({ key: 'dup', label: '重复', tone: 'muted' })
-  if (row.matchStatus === 'multiple') {
-    out.push({ key: 'same', label: `同名 ${row.candidates.length} 位`, tone: 'warn' })
-  }
-  if (row.amountMismatch) out.push({ key: 'mismatch', label: '大小写不一致', tone: 'warn' })
-  if (props.review.isLowConfidence(row)) out.push({ key: 'low', label: '字迹不清', tone: 'warn' })
-  if (!row.name.trim()) out.push({ key: 'name', label: '缺姓名', tone: 'warn' })
-  if (row.itemKind !== 'gift' && yuanToCent(row.amountText) <= 0) {
-    out.push({ key: 'amount', label: '缺金额', tone: 'warn' })
-  }
-  if (row.matchStatus === 'single') out.push({ key: 'match', label: candidateLabel(row), tone: 'info' })
-  if (row.matchStatus === 'none' && row.name.trim()) out.push({ key: 'new', label: '新亲友', tone: 'info' })
-  return out
-}
-
-function candidateLabel(row: ReviewRow): string {
-  const candidate = row.candidates.find((item) => item.id === row.personId)
-  return candidate ? `${candidate.name} · ${candidate.relationLabel}` : '已匹配'
-}
-
-function toggleRow(row: ReviewRow): void {
-  if (props.readonly) return
-  // 勾选即确认：黄色行只有勾上并确认后才不再阻塞写入。
-  if (!row.checked) props.review.confirmRow(row)
-  props.review.toggleRow(row)
-}
-
-function pickCandidate(row: ReviewRow, event: Event): void {
-  const value = (event.target as HTMLSelectElement).value
-  if (value === 'new') {
-    row.personId = 0
-    row.matchStatus = 'none'
-    row.candidates = []
-    props.review.confirmRow(row)
-    return
-  }
-  const candidate = row.candidates.find((item) => item.id === Number(value))
-  if (candidate) props.review.chooseCandidate(row, candidate)
-}
-
-function hasSubRow(row: ReviewRow): boolean {
-  return (
-    (row.matchStatus === 'multiple' && row.candidates.length > 0) ||
-    row.amountMismatch ||
-    row.repays.length > 0 ||
-    Boolean(row.error)
-  )
-}
-
-function repayTotalText(row: ReviewRow, index: number): string {
-  const repay = row.repays[index]
-  const total = repay ? props.review.repayTotalCent(repay) : 0
-  return total > 0 ? formatCent(total) : ''
+function candidateLabel(name: string, remark: string): string {
+  return remark ? `${name} · ${remark}` : name
 }
 </script>
 
@@ -118,524 +22,91 @@ function repayTotalText(row: ReviewRow, index: number): string {
   <WebTable class="rv-table">
     <thead>
       <tr>
-        <th class="rv-col-check">确认</th>
-        <th class="rv-col-name">姓名</th>
-        <th class="rv-col-amount">金额</th>
-        <th class="rv-col-kind">名目</th>
-        <th class="rv-col-note">标注与提示</th>
-        <th class="rv-col-ops" />
+        <th class="rv-check">确认</th>
+        <th>姓名</th>
+        <th class="rv-amount">金额（元）</th>
+        <th>备注</th>
       </tr>
     </thead>
     <tbody>
-      <template v-for="row in review.rows.value" :key="row.key">
-        <tr
-          class="rv-row"
-          :class="{
-            'rv-row--off': !row.checked,
-            'rv-row--pend': isPending(row),
-            'rv-row--err': Boolean(row.error),
-            'rv-row--active': review.activeKey.value === row.key,
-          }"
-          :data-row-key="row.key"
-          @click="review.activate(row)"
-        >
-          <td class="rv-col-check" @click.stop>
-            <input
-              class="web-check"
-              type="checkbox"
-              :checked="row.checked"
-              :disabled="readonly"
-              aria-label="确认这一行"
-              @change="toggleRow(row)"
-            />
-          </td>
-          <td class="rv-col-name">
-            <div class="rv-name">
-              <span class="rv-seq web-num web-muted">{{ row.seq }}</span>
-              <div class="rv-name__box">
-                <input
-                  class="web-input rv-input"
-                  type="text"
-                  :data-cell="`${row.key}:name`"
-                  :value="row.name"
-                  :disabled="readonly"
-                  placeholder="姓名"
-                  @focus="review.activate(row)"
-                  @input="review.onNameInput(row, asDetail($event))"
-                />
-                <span v-if="row.matchStatus === 'none' && row.name.trim()" class="rv-tag rv-tag--new">新</span>
-                <span v-else-if="row.matchStatus === 'single'" class="rv-tag">{{ candidateLabel(row) }}</span>
-              </div>
-            </div>
-          </td>
-
-          <td class="rv-col-amount">
-            <input
-              class="web-input rv-input rv-input--num"
-              type="text"
-              inputmode="decimal"
-              :data-cell="`${row.key}:amount`"
-              :value="row.amountText"
-              :disabled="readonly"
-              placeholder="金额"
-              :class="{ 'rv-mismatch': row.amountMismatch }"
-              @input="review.onAmountInput(row, asDetail($event))"
-            />
-            <span
-              class="rv-upper"
-              :class="{ 'rv-upper--mismatch': row.amountMismatch }"
-              :title="row.amountMismatch ? review.mismatchTitle(row) : row.amountUpper"
-            >
-              {{ row.amountUpper || '—' }}
-            </span>
-          </td>
-
-          <td class="rv-col-kind">
-            <select
-              class="web-select rv-select"
-              :value="String(review.itemKindIndex(row.itemKind))"
-              :disabled="readonly"
-              aria-label="名目"
-              @change="review.onItemKindChange(row, asDetail($event))"
-            >
-              <option v-for="(label, index) in ITEM_KIND_OPTIONS" :key="label" :value="String(index)">
-                {{ label }}
-              </option>
-            </select>
-          </td>
-
-          <td class="rv-col-note">
-            <textarea
-              class="web-textarea rv-note"
-              rows="1"
-              :data-cell="`${row.key}:note`"
-              :value="row.note"
-              :disabled="readonly"
-              placeholder="纸本标注"
-              @keydown.enter.prevent
-              @input="review.onNoteInput(row, asDetail($event))"
-            />
-            <div class="rv-flags">
-              <span
-                v-for="flag in flagsOf(row)"
-                :key="flag.key"
-                class="rv-flag"
-                :class="`rv-flag--${flag.tone}`"
-              >
-                {{ flag.label }}
-              </span>
-              <span v-if="isPending(row)" class="rv-flag rv-flag--pend">待确认</span>
-              <span v-else-if="isFlagged(row)" class="rv-flag rv-flag--ok">已确认</span>
-            </div>
-          </td>
-
-          <td class="rv-col-ops" @click.stop>
-            <button
-              v-if="!readonly"
-              class="web-btn web-btn--text web-btn--sm rv-del"
-              type="button"
-              aria-label="删除这一行"
-              @click="review.removeRow(row)"
-            >
-              <WebIcon name="trash" :size="15" />
-            </button>
-          </td>
-        </tr>
-
-        <tr v-if="hasSubRow(row)" class="rv-subrow">
-          <td :colspan="6">
-            <div class="rv-sub">
-              <div v-if="row.matchStatus === 'multiple' && row.candidates.length" class="rv-sub__block">
-                <span class="rv-sub__label">同名亲友</span>
-                <template v-if="readonly">
-                  <span class="web-sm web-muted">尚未选择</span>
-                </template>
-                <select
-                  v-else
-                  class="web-select rv-select rv-select--wide"
-                  value=""
-                  @change="pickCandidate(row, $event)"
-                >
-                  <option value="" disabled>选择已有亲友…</option>
-                  <option v-for="candidate in row.candidates" :key="candidate.id" :value="String(candidate.id)">
-                    {{ candidate.name }} · {{ candidate.relationLabel }}
-                  </option>
-                  <option value="new">＋ 新建同名亲友</option>
-                </select>
-              </div>
-
-              <div v-if="row.amountMismatch" class="rv-sub__block">
-                <span class="rv-sub__label">金额</span>
-                <span class="web-sm">
-                  大写 {{ row.amountUpper }} · 小写 {{ row.amountLower ?? '—' }}
-                </span>
-                <template v-if="!readonly">
-                  <button class="web-btn web-btn--text web-btn--sm" type="button" @click="review.useUpper(row)">
-                    按大写
-                  </button>
-                  <button class="web-btn web-btn--text web-btn--sm" type="button" @click="review.useLower(row)">
-                    按小写
-                  </button>
-                </template>
-              </div>
-
-              <div v-if="row.repays.length" class="rv-sub__block rv-sub__block--repay">
-                <span class="rv-sub__label">回礼标注</span>
-                <label v-if="!readonly" class="rv-switch">
-                  <input
-                    type="checkbox"
-                    :checked="row.repaysEnabled"
-                    @change="review.toggleRepays(row)"
-                  />
-                  一并补录
-                </label>
-                <template v-if="readonly">
-                  <span v-for="(repay, index) in row.repays" :key="repay.key" class="web-sm web-muted">
-                    {{ index + 1 }}. {{ review.repaySummary(repay) }}
-                  </span>
-                </template>
-                <template v-else>
-                  <div v-for="(repay, index) in row.repays" :key="repay.key" class="rv-repay">
-                    <span class="rv-repay__no web-num web-muted">{{ index + 1 }}</span>
-                    <input
-                      class="web-input rv-input rv-repay__event"
-                      type="text"
-                      :value="repay.eventName"
-                      :disabled="!row.repaysEnabled"
-                      placeholder="对方事项"
-                      @input="review.onRepayEventInput(repay, asDetail($event))"
-                    />
-                    <input
-                      class="web-input rv-input rv-repay__date"
-                      type="date"
-                      :value="repay.occurredOn"
-                      :disabled="!row.repaysEnabled"
-                      aria-label="还礼日期"
-                      @change="review.onRepayDateChange(repay, asDetail($event))"
-                    />
-                    <input
-                      class="web-input rv-input rv-repay__amount"
-                      type="text"
-                      inputmode="decimal"
-                      :value="repay.cashText"
-                      :disabled="!row.repaysEnabled"
-                      placeholder="现金"
-                      @input="review.onRepayCashInput(repay, asDetail($event))"
-                    />
-                    <input
-                      class="web-input rv-input rv-repay__amount"
-                      type="text"
-                      inputmode="decimal"
-                      :value="repay.huopaoText"
-                      :disabled="!row.repaysEnabled"
-                      placeholder="火炮"
-                      @input="review.onRepayHuopaoInput(repay, asDetail($event))"
-                    />
-                    <span class="web-sm web-muted">{{ repayTotalText(row, index) }}</span>
-                  </div>
-                </template>
-              </div>
-
-              <div v-if="row.error" class="rv-sub__block">
-                <span class="rv-flag rv-flag--err">{{ row.error }}</span>
-              </div>
-            </div>
-          </td>
-        </tr>
-      </template>
+      <tr
+        v-for="row in rows"
+        :key="row.seq"
+        :class="{ 'rv-row--warn': row.checked && (rowProblem(row) || row.confidence < LOW_CONFIDENCE), 'rv-row--off': !row.checked }"
+      >
+        <td class="rv-check">
+          <input v-model="row.checked" class="web-check" type="checkbox" :aria-label="`确认第 ${row.seq} 行`" />
+        </td>
+        <td>
+          <div class="rv-name">
+            <span class="web-muted rv-seq">{{ row.seq }}</span>
+            <input v-model="row.name" class="web-input" maxlength="32" placeholder="姓名" @input="row.personChoice = 0" />
+          </div>
+          <select v-if="row.candidates.length" v-model.number="row.personChoice" class="web-select rv-sub">
+            <option v-for="item in row.candidates" :key="item.personId" :value="item.personId">
+              已有：{{ candidateLabel(item.personName, item.personRemark) }}
+            </option>
+            <option :value="0">新建亲友</option>
+          </select>
+          <input
+            v-if="!row.personChoice"
+            v-model="row.remark"
+            class="web-input rv-sub"
+            maxlength="32"
+            placeholder="新亲友备注，同名时用来区分"
+          />
+          <small v-if="row.checked && rowProblem(row)" class="rv-flag">{{ rowProblem(row) }}</small>
+          <small v-else-if="row.confidence < LOW_CONFIDENCE" class="rv-flag">字迹不清，请对照原图：{{ row.raw }}</small>
+        </td>
+        <td class="rv-amount">
+          <input v-model="row.amountText" class="web-input" inputmode="decimal" placeholder="0" />
+          <small class="web-upper">{{ upperOf(row) }}</small>
+        </td>
+        <td>
+          <input v-model="row.note" class="web-input" maxlength="256" placeholder="礼品、火炮等" />
+        </td>
+      </tr>
     </tbody>
   </WebTable>
-
 </template>
 
 <style lang="scss" scoped>
-.rv-table :deep(.web-table) {
-  table-layout: fixed;
-}
-
-.rv-table :deep(th),
-.rv-table :deep(td) {
-  padding: 6px;
-}
-
-.rv-col-check {
-  width: 40px;
+.rv-check {
+  width: 56px;
   text-align: center;
 }
 
-.rv-col-amount {
-  width: 96px;
-  text-align: right;
-}
-
-.rv-col-name {
-  width: 140px;
-}
-
-.rv-col-kind {
-  width: 74px;
-}
-
-.rv-col-note {
-  white-space: normal;
-}
-
-.rv-col-ops {
-  width: 32px;
-  text-align: right;
-}
-
-.rv-row {
-  cursor: default;
-}
-
-.rv-row--off {
-  opacity: 0.62;
-}
-
-.rv-row--pend {
-  background: var(--c-pending-light);
-}
-
-.rv-row--err {
-  box-shadow: inset 3px 0 0 var(--c-danger);
-}
-
-.rv-row--active {
-  background: var(--c-primary-light);
-}
-
-.rv-row--active.rv-row--pend {
-  background: var(--c-pending-light);
-}
-
-.rv-input {
-  width: 100%;
-  height: 30px;
-  padding: 0 8px;
-  font-size: 13px;
-}
-
-.rv-input--num {
-  font-family: $font-num;
-  text-align: right;
-}
-
-.rv-note {
-  width: 100%;
-  min-height: 44px;
-  max-height: 90px;
-  padding: 4px 8px;
-  overflow-y: auto;
-  font-size: 13px;
-  line-height: 18px;
-  resize: none;
-  scrollbar-width: none;
-  field-sizing: content;
-}
-
-.rv-note::-webkit-scrollbar {
-  display: none;
-}
-
-.rv-note:focus {
-  border-color: var(--c-primary);
-  background: var(--c-surface);
-}
-
-.rv-select {
-  height: 30px;
-  padding: 0 24px 0 8px;
-  font-size: 13px;
-  background-position: calc(100% - 13px) 13px, calc(100% - 8px) 13px;
-}
-
-.rv-select--wide {
-  min-width: 220px;
+.rv-amount {
+  width: 160px;
 }
 
 .rv-name {
   display: flex;
-  align-items: flex-start;
-  gap: 4px;
-  min-width: 0;
+  align-items: center;
+  gap: var(--sp-2);
 }
 
 .rv-seq {
-  flex: none;
-  width: 16px;
-  padding-top: 8px;
-  font-size: 11px;
-  line-height: 14px;
-  text-align: right;
-}
-
-.rv-name__box {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.rv-name__box .rv-tag {
-  margin-top: 2px;
-}
-
-.rv-upper {
-  display: block;
-  overflow: hidden;
-  margin-top: 2px;
-  color: var(--c-ink-3);
-  font-family: $font-serif;
-  font-size: 11px;
-  line-height: 14px;
-  text-align: right;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.rv-upper--mismatch {
-  color: var(--c-pending);
-  font-weight: 600;
-}
-
-.rv-col-note .rv-flags {
-  margin-top: 4px;
-}
-
-.rv-mismatch {
-  color: var(--c-pending);
-  font-weight: 600;
-  box-shadow: inset 0 0 0 1px var(--c-pending);
-  border-radius: var(--r-xs);
-}
-
-.rv-tag {
-  display: inline-block;
-  margin-top: 3px;
-  color: var(--c-ink-3);
-  font-size: 11px;
-  line-height: 16px;
-}
-
-.rv-tag--new {
-  color: var(--c-out);
-}
-
-.rv-flags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.rv-flag {
-  display: inline-flex;
-  align-items: center;
-  height: 20px;
-  padding: 0 7px;
-  border-radius: var(--r-full);
-  font-size: 11px;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.rv-flag--warn {
-  background: var(--c-pending-light);
-  color: var(--c-pending);
-}
-
-.rv-flag--info {
-  background: var(--c-fill);
-  color: var(--c-ink-2);
-}
-
-.rv-flag--muted {
-  background: var(--c-none-light);
-  color: var(--c-none);
-}
-
-.rv-flag--pend {
-  background: var(--c-pending);
-  color: var(--c-on-primary);
-}
-
-.rv-flag--ok {
-  background: var(--c-repaid-light);
-  color: var(--c-repaid);
-}
-
-.rv-flag--err {
-  background: var(--c-danger-light);
-  color: var(--c-danger);
-  height: auto;
-  padding: 3px 8px;
-  white-space: normal;
-}
-
-.rv-col-kind .rv-select {
-  width: 100%;
-}
-
-.rv-del {
-  padding: 0 2px;
-  color: var(--c-ink-3);
-}
-
-.rv-del:hover {
-  color: var(--c-danger);
-}
-
-.rv-subrow :deep(td) {
-  padding: 0 10px 8px;
-  background: var(--c-hover);
+  min-width: 20px;
 }
 
 .rv-sub {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 8px 10px;
-  border-radius: var(--r-s);
-  background: var(--c-surface);
+  margin-top: var(--sp-1);
+  margin-left: 28px;
+  width: calc(100% - 28px);
 }
 
-.rv-sub__block {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
+.rv-flag {
+  display: block;
+  margin-left: 28px;
+  color: var(--c-pending);
 }
 
-.rv-sub__label {
-  color: var(--c-ink-3);
-  font-size: 12px;
-  font-weight: 500;
+.rv-row--warn td {
+  background: var(--c-pending-light);
 }
 
-.rv-sub__block--repay {
-  align-items: flex-start;
+.rv-row--off td {
+  opacity: 0.5;
 }
-
-.rv-switch {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--c-ink-2);
-  font-size: 12px;
-}
-
-.rv-repay {
-  display: grid;
-  grid-template-columns: 16px minmax(110px, 1fr) 120px 70px 70px 56px;
-  align-items: center;
-  gap: 6px;
-  flex: 1;
-  min-width: 0;
-}
-
-.rv-repay__no {
-  font-size: 12px;
-  text-align: center;
-}
-
 </style>

@@ -4,24 +4,33 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"harmony/component/health/service"
+	"harmony/infra/logger"
 	"harmony/infra/response"
 )
 
 type HealthAPI struct {
 	healthSrv *service.HealthSrv
+	log       *logger.Logger
 }
 
 func NewHealthAPI(healthSrv *service.HealthSrv) *HealthAPI {
-	return &HealthAPI{healthSrv: healthSrv}
+	api := HealthAPI{
+		healthSrv: healthSrv,
+		log: logger.New(
+			logger.WithModule("health"),
+			logger.WithSubModule("api"),
+		),
+	}
+	return &api
 }
 
-func (api *HealthAPI) Check(c *gin.Context) {
-	status, err := api.healthSrv.Check(c.Request.Context())
+func (api *HealthAPI) Check(ctx *gin.Context) {
+	status, err := api.healthSrv.Check(ctx.Request.Context())
 	if err != nil {
-		response.JsonErr(c, err)
+		response.JSONError(ctx, err)
 		return
 	}
-	response.JsonOK(c, response.WithItem(status))
+	response.JSONOK(ctx, response.WithItem(status))
 }
 
 func RegisterRoutes(group *gin.RouterGroup, healthAPI *HealthAPI) {

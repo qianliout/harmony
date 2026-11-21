@@ -2,591 +2,483 @@ package service
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"math"
-	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
+	"runtime/debug"
 	"strings"
 	"time"
 
-	"gorm.io/gorm"
-
+	bookstore "harmony/component/book/store"
 	"harmony/component/config"
+	personservice "harmony/component/person/service"
+	personstore "harmony/component/person/store"
 	"harmony/component/recognize/store"
 	recordservice "harmony/component/record/service"
 	"harmony/infra/consts"
 	"harmony/infra/logger"
-	"harmony/infra/middleware"
+	"harmony/infra/model/book"
+	modelfilter "harmony/infra/model/filter"
 	"harmony/infra/model/person"
 	"harmony/infra/model/recognize"
 	"harmony/infra/model/record"
-	"harmony/infra/rdb"
 	"harmony/infra/response"
-	"harmony/infra/utils"
 )
 
-const maxImageSize = 5 << 20
-
-type RecordWriter interface {
-	CreateInTx(ctx context.Context, tx *gorm.DB, param record.CreateParam) (*record.Record, error)
-	RepayInTx(ctx context.Context, tx *gorm.DB, param record.RepayParam) ([]record.Record, error)
+// recognizer 是 RecognizeSrv 对识别模型的最小依赖，由 *OpenAICompatRecognizer 满足，测试可替换。
+type recognizer interface {
+	Recognize(ctx context.Context, img Image) (*Result, error)
 }
 
-type PersonStore interface {
-	FindExactByName(db *gorm.DB, ownerID uint64, name string) ([]person.Person, error)
-	CountAll(db *gorm.DB, ownerID uint64) (int64, error)
-}
-
-type PageCheckStore interface {
-	UpsertPageCheck(db *gorm.DB, ownerID uint64, bookID uint64, page string, declaredCent int64) error
-}
-
-// ImageSigner 为原图生成签名 URL，并校验签名、有效期与 owner。
-type ImageSigner interface {
-	SignImage(taskID, ownerID uint64) string
-	VerifyImage(taskID, ownerID uint64, expires int64, sig string) bool
+// commitPerson 是写入某一行时确定的亲友；Created 表示本次批量写入新建了该亲友。
+type commitPerson struct {
+	personID int64
+	created  bool
 }
 
 type RecognizeSrv struct {
-	rdb      *rdb.RDB
-	store    *store.Store
-	records  RecordWriter
-	persons  PersonStore
-	pages    PageCheckStore
-	signer   ImageSigner
-	provider Recognizer
-	cfg      config.RecognizeConfig
-	uploadDir string
-	sem      chan struct{}
-	log      *logger.Logger
+	taskDal    *store.RecognizeTaskDao
+	personDal  *personstore.PersonDao
+	bookDal    *bookstore.BookDao
+	personSrv  *personservice.PersonSrv
+	recordSrv  *recordservice.RecordSrv
+	recognizer recognizer
+	cfg        config.RecognizeConfig
+	uploadDir  string
+	sem        chan struct{}
+	log        *logger.Logger
 }
 
 func NewRecognizeSrv(
-	database *rdb.RDB,
-	taskStore *store.Store,
+	taskDal *store.RecognizeTaskDao,
+	personDal *personstore.PersonDao,
+	bookDal *bookstore.BookDao,
+	personSrv *personservice.PersonSrv,
 	recordSrv *recordservice.RecordSrv,
-	personStore PersonStore,
-	pageStore PageCheckStore,
-	signer ImageSigner,
-	provider Recognizer,
+	recognizer recognizer,
 	cfg config.RecognizeConfig,
 	uploadDir string,
 ) *RecognizeSrv {
 	return &RecognizeSrv{
-		rdb:       database,
-		store:     taskStore,
-		records:   recordSrv,
-		persons:   personStore,
-		pages:     pageStore,
-		signer:    signer,
-		provider:  provider,
-		cfg:       cfg,
-		uploadDir: uploadDir,
-		sem:       make(chan struct{}, 2),
-		log:       logger.New(logger.WithModule("recognize"), logger.WithSubModule("service")),
+		taskDal:    taskDal,
+		personDal:  personDal,
+		bookDal:    bookDal,
+		personSrv:  personSrv,
+		recordSrv:  recordSrv,
+		recognizer: recognizer,
+		cfg:        cfg,
+		uploadDir:  uploadDir,
+		sem:        make(chan struct{}, consts.RecognizeConcurrency),
+		log:        logger.New(logger.WithModule("recognize"), logger.WithSubModule("service")),
 	}
 }
 
-type taskPayload struct {
-	Page          string            `json:"page"`
-	PageTotal     *float64          `json:"pageTotal"`
-	PageTotalCent int64             `json:"pageTotalCent"`
-	SumCent       int64             `json:"sumCent"`
-	Items         []recognize.Item  `json:"items"`
-}
-
-func (s *RecognizeSrv) CreateTask(ctx context.Context, file io.Reader) (*recognize.Resp, error) {
+// CreateRecognizeTask 保存原图、建任务，并在后台调用识别模型；接口立即返回 pending 任务。
+func (s *RecognizeSrv) CreateRecognizeTask(ctx context.Context, param *recognize.CreateRecognizeTaskParam) (*recognize.RecognizeTask, error) {
 	if s.cfg.APIKey == "" {
-		return nil, response.BadGateway("识别服务还没配置 API Key，先在环境变量里配置")
+		return nil, response.BadGateway("识别服务还没配置 API Key，先在环境变量里配置", "recognize api key is not configured")
 	}
-	ownerID := middleware.OwnerID(ctx)
-	if s.cfg.DailyLimit > 0 {
-		now := time.Now()
-		start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-		used, err := s.store.CountToday(s.rdb.Get(), ownerID, start)
-		if err != nil {
-			return nil, err
-		}
-		if used >= s.cfg.DailyLimit {
-			return nil, response.BadRequest("今天的识别次数已用完", "daily recognition limit reached")
-		}
+	if err := s.checkDailyLimit(ctx, param.OwnerID); err != nil {
+		return nil, err
 	}
-	data, err := io.ReadAll(io.LimitReader(file, maxImageSize+1))
-	if err != nil {
-		return nil, response.BadRequest("读取图片失败", "read image failed")
-	}
-	if len(data) == 0 {
-		return nil, response.BadRequest("请选择一张礼簿照片", "image is empty")
-	}
-	if len(data) > maxImageSize {
-		return nil, response.BadRequest("图片不能超过 5MB", "image is too large")
-	}
-	mime := http.DetectContentType(data)
-	ext := ""
-	switch mime {
-	case "image/jpeg":
-		ext = "jpg"
-	case "image/png":
-		ext = "png"
-	default:
-		return nil, response.BadRequest("只支持 jpg、png 图片", "unsupported image type")
-	}
-	sum := sha256.Sum256(data)
-	sha := hex.EncodeToString(sum[:])
-	month := time.Now().Format("200601")
-	relPath := filepath.Join(month, sha+"."+ext)
+
+	ext := consts.RecognizeImageExt[param.ImageMIME]
+	relPath := filepath.Join(time.Now().Format("200601"), param.ImageSHA256+"."+ext)
 	fullPath := filepath.Join(s.uploadDir, relPath)
 	if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+		s.log.Error(ctx).Err(err).Str("path", fullPath).Msg("create upload dir failed")
 		return nil, err
 	}
-	if err := os.WriteFile(fullPath, data, 0o644); err != nil {
+	if err := os.WriteFile(fullPath, param.ImageData, 0o644); err != nil {
+		s.log.Error(ctx).Err(err).Str("path", fullPath).Msg("write upload image failed")
 		return nil, err
 	}
 
-	task := &recognize.Task{
-		OwnerID:     ownerID,
+	task := &recognize.RecognizeTask{
+		OwnerID:     param.OwnerID,
 		ImagePath:   relPath,
-		ImageSHA256: sha,
-		ImageSize:   len(data),
+		ImageSHA256: param.ImageSHA256,
+		ImageSize:   int64(len(param.ImageData)),
 		Status:      consts.TaskStatusPending,
 		Provider:    s.cfg.Provider,
 		Model:       s.cfg.Model,
-		// JSON 列不接受空字符串；pending 任务先写一个空对象。
-		Items:       "{}",
 	}
-	if err := s.store.Create(s.rdb.Get(), task); err != nil {
+	if err := s.taskDal.CreateRecognizeTask(ctx, task); err != nil {
+		s.log.Error(ctx).Err(err).Int64("ownerID", param.OwnerID).Msg("createRecognizeTask failed")
 		return nil, err
 	}
-	imageData := append([]byte(nil), data...)
-	go s.runTask(task.ID, ownerID, Image{Data: imageData, MIME: mime})
-	s.log.Info(ctx).Uint64("taskId", task.ID).Int("size", len(data)).Bool("apiKeySet", s.cfg.APIKey != "").Msg("recognize.create")
-	return s.buildResp(task, taskPayload{Items: []recognize.Item{}}), nil
+	s.log.Info(ctx).Int64("taskID", task.ID).Int64("size", task.ImageSize).Msg("recognize task created")
+
+	background := *task
+	img := Image{Data: param.ImageData, MIME: param.ImageMIME}
+	go s.runRecognizeTask(&background, img)
+	return task, nil
 }
 
-func (s *RecognizeSrv) runTask(taskID uint64, ownerID uint64, img Image) {
-	s.sem <- struct{}{}
-	defer func() { <-s.sem }()
-
-	timeout := time.Duration(s.cfg.TimeoutSeconds) * time.Second
-	if timeout <= 0 {
-		timeout = 60 * time.Second
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	db := s.rdb.Get()
-	if err := s.store.MarkRunning(db, taskID); err != nil {
-		s.log.Error(ctx).Err(err).Uint64("taskId", taskID).Msg("mark running failed")
-		return
-	}
-	start := time.Now()
-	result, err := s.provider.Recognize(ctx, img)
+func (s *RecognizeSrv) GetRecognizeTask(ctx context.Context, param *recognize.GetRecognizeTaskParam) (*recognize.RecognizeTask, error) {
+	task, err := s.getTask(ctx, param.OwnerID, param.ID)
 	if err != nil {
-		message := err.Error()
-		if errors.Is(err, context.DeadlineExceeded) {
-			message = "识别超时"
-		}
-		if len(message) > 500 {
-			message = message[:500]
-		}
-		if markErr := s.store.MarkFailed(db, taskID, message, ""); markErr != nil {
-			s.log.Error(ctx).Err(markErr).Uint64("taskId", taskID).Msg("mark failed error")
-		}
-		s.log.Warn(ctx).Uint64("taskId", taskID).Err(err).Msg("recognize failed")
-		return
-	}
-	payload := s.enhance(ownerID, result)
-	payloadJSON, err := json.Marshal(payload)
-	if err != nil {
-		_ = s.store.MarkFailed(db, taskID, "识别结果保存失败", result.Raw)
-		return
-	}
-	if err := s.store.MarkSucceeded(db, taskID, string(payloadJSON), result.Raw); err != nil {
-		s.log.Error(ctx).Err(err).Uint64("taskId", taskID).Msg("mark succeeded failed")
-		return
-	}
-	s.log.Info(ctx).
-		Uint64("taskId", taskID).
-		Str("model", result.Model).
-		Int64("latencyMs", time.Since(start).Milliseconds()).
-		Int("itemCount", len(payload.Items)).
-		Msg("recognize.succeeded")
-}
-
-func (s *RecognizeSrv) enhance(ownerID uint64, result *Result) taskPayload {
-	payload := taskPayload{
-		Page:      result.Page,
-		PageTotal: result.PageTotal,
-		Items:     make([]recognize.Item, 0, len(result.Items)),
-	}
-	if result.PageTotal != nil {
-		payload.PageTotalCent = int64(math.Round(*result.PageTotal * 100))
-	}
-	for i := range result.Items {
-		providerItem := result.Items[i]
-		item := recognize.Item{
-			Seq:         providerItem.Seq,
-			Name:        strings.TrimSpace(providerItem.Name),
-			AmountUpper: strings.TrimSpace(providerItem.AmountUpper),
-			AmountLower: providerItem.AmountLower,
-			GiftName:    strings.TrimSpace(providerItem.GiftName),
-			Date:        strings.TrimSpace(providerItem.Date),
-			Note:        strings.TrimSpace(providerItem.Note),
-			Raw:         strings.TrimSpace(providerItem.Raw),
-			Confidence:  clampConfidence(providerItem.Confidence),
-		}
-		if item.Seq == 0 {
-			item.Seq = i + 1
-		}
-		if providerItem.ItemKind == consts.ItemKindCash || providerItem.ItemKind == consts.ItemKindHuopao || providerItem.ItemKind == consts.ItemKindGift {
-			item.ItemKind = providerItem.ItemKind
-		}
-		// “贺礼/礼金”这类字样不是礼品；只有名目为实物礼品时才保留礼品名。
-		if item.ItemKind == "" && item.GiftName != "" && providerItem.Amount == 0 {
-			item.ItemKind = consts.ItemKindGift
-		}
-		if item.ItemKind != consts.ItemKindGift {
-			item.GiftName = ""
-		}
-		if consts.ValidDirection(providerItem.Direction) {
-			item.Direction = providerItem.Direction
-		}
-		amount := providerItem.Amount
-		if amount < 0 {
-			amount = 0
-		}
-		if upperYuan, ok := parseUpperAmount(item.AmountUpper); ok {
-			if item.AmountLower != nil && math.Abs(upperYuan-*item.AmountLower) > 0.005 {
-				item.AmountMismatch = true
-				item.Confidence = math.Min(item.Confidence, 0.5)
-			}
-			amount = upperYuan
-		} else if item.AmountLower != nil {
-			amount = *item.AmountLower
-		}
-		item.Amount = amount
-		if item.Note != "" {
-			parsed := recordservice.ParsePaperNoteText(item.Note)
-			item.RepayDrafts = parsed.Repays
-		}
-		if item.Name != "" {
-			matches, err := s.persons.FindExactByName(s.rdb.Get(), ownerID, item.Name)
-			if err == nil {
-				match := &recognize.Match{Status: "none", Candidates: []recognize.PersonMatch{}}
-				switch len(matches) {
-				case 1:
-					match.Status = "single"
-					match.PersonID = matches[0].ID
-				case 0:
-				default:
-					match.Status = "multiple"
-				}
-				for j := range matches {
-					match.Candidates = append(match.Candidates, recognize.PersonMatch{
-						ID:            matches[j].ID,
-						Name:          matches[j].Name,
-						RelationLabel: person.LabelOf(matches[j].Relation),
-					})
-				}
-				item.Match = match
-			}
-		}
-		payload.Items = append(payload.Items, item)
-		payload.SumCent += int64(math.Round(item.Amount * 100))
-	}
-	return payload
-}
-
-func parseUpperAmount(upper string) (float64, bool) {
-	text := strings.TrimSpace(upper)
-	if text == "" {
-		return 0, false
-	}
-	text = strings.NewReplacer("元", "", "圆", "", "整", "", " ", "").Replace(text)
-	if text == "" {
-		return 0, false
-	}
-	if number, ok := utils.ParseChineseNumber(text); ok {
-		return float64(number), true
-	}
-	parsed, err := strconv.ParseFloat(text, 64)
-	if err != nil || parsed < 0 {
-		return 0, false
-	}
-	return parsed, true
-}
-
-func clampConfidence(value float64) float64 {
-	if value < 0 {
-		return 0
-	}
-	if value > 1 {
-		return 1
-	}
-	return value
-}
-
-func (s *RecognizeSrv) Detail(ctx context.Context, id uint64) (*recognize.Resp, error) {
-	ownerID := middleware.OwnerID(ctx)
-	task, err := s.store.Get(s.rdb.Get(), ownerID, id)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, response.NotFound("识别任务不存在")
-		}
 		return nil, err
 	}
-	return s.buildResp(task, parsePayload(task.Items)), nil
+	return task, nil
 }
 
-func (s *RecognizeSrv) List(ctx context.Context, page, pageSize int64) ([]recognize.Resp, int64, error) {
-	ownerID := middleware.OwnerID(ctx)
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 || pageSize > consts.MaxPageSize {
-		pageSize = consts.DefaultPageSize
-	}
-	tasks, total, err := s.store.List(s.rdb.Get(), ownerID, (page-1)*pageSize, pageSize)
+// ResolveRecognizeImage 返回原图的绝对路径，并保证它落在上传目录内。
+func (s *RecognizeSrv) ResolveRecognizeImage(ctx context.Context, param *recognize.GetRecognizeTaskParam) (string, error) {
+	task, err := s.getTask(ctx, param.OwnerID, param.ID)
 	if err != nil {
-		return nil, 0, err
+		return "", err
 	}
-	out := make([]recognize.Resp, 0, len(tasks))
-	for i := range tasks {
-		out = append(out, *s.buildResp(&tasks[i], parsePayload(tasks[i].Items)))
+	root, err := filepath.Abs(s.uploadDir)
+	if err != nil {
+		s.log.Error(ctx).Err(err).Str("uploadDir", s.uploadDir).Msg("resolve upload dir failed")
+		return "", err
 	}
-	return out, total, nil
+	target := filepath.Clean(filepath.Join(root, task.ImagePath))
+	if !strings.HasPrefix(target, root+string(filepath.Separator)) {
+		return "", response.Forbidden("原图路径无效", "invalid image path")
+	}
+	return target, nil
 }
 
-func (s *RecognizeSrv) Commit(ctx context.Context, id uint64, param recognize.CommitParam) (*recognize.CommitResult, error) {
-	ownerID := middleware.OwnerID(ctx)
-	db := s.rdb.Get()
-	task, err := s.store.Get(db, ownerID, id)
+// CommitRecognizeTask 把核对后的识别结果写成记录。不使用事务：先完成全部只读校验，再逐条写入；
+// 中途写入失败时已写入的记录保留，任务不标记为已写入，错误信息带上失败行号。
+func (s *RecognizeSrv) CommitRecognizeTask(ctx context.Context, param *recognize.CommitRecognizeTaskParam) (*recognize.CommitRecognizeResult, error) {
+	task, err := s.getTask(ctx, param.OwnerID, param.ID)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, response.NotFound("识别任务不存在")
-		}
 		return nil, err
 	}
 	if task.Status != consts.TaskStatusSucceeded {
-		return nil, response.StateConflict("识别还没有完成，不能写入")
+		return nil, response.StateConflict("识别还没有完成，不能写入", "task is not succeeded")
 	}
-	if task.Committed {
-		return nil, response.StateConflict("这批识别结果已经写入过了")
+	if task.Committed == consts.TrueString {
+		return nil, response.StateConflict("这批识别结果已经写入过了", "task already committed")
 	}
-	if len(param.Items) == 0 {
-		return nil, response.BadRequest("请至少勾选一条识别结果", "no items selected")
+	if param.Direction == consts.DirectionIn {
+		if err := s.checkBook(ctx, param.OwnerID, param.BookID); err != nil {
+			return nil, err
+		}
 	}
-	beforePersons, err := s.persons.CountAll(db, ownerID)
+	matched, err := s.matchCommitPersons(ctx, param)
 	if err != nil {
 		return nil, err
 	}
 
-	result := &recognize.CommitResult{RecordIDs: []uint64{}}
-	err = db.Transaction(func(tx *gorm.DB) error {
-		for index := range param.Items {
-			item := param.Items[index]
-			occurredOn := strings.TrimSpace(item.OccurredOn)
-			if occurredOn == "" {
-				occurredOn = utils.DateString(time.Now())
-			}
-			bookID := item.BookID
-			if bookID == 0 {
-				bookID = param.BookID
-			}
-			if bookID == 0 {
-				return commitItemError(index, "bookId", "还没有选择礼簿")
-			}
-			paperPage := item.PaperPage
-			paperSeq := item.PaperSeq
-			if paperPage == "" && parsePayload(task.Items).Page != "" {
-				paperPage = parsePayload(task.Items).Page
-			}
-			created, err := s.records.CreateInTx(ctx, tx, record.CreateParam{
-				PersonID:        item.PersonID,
-				PersonName:      item.PersonName,
-				EventID:         item.EventID,
-				BookID:          bookID,
-				ItemKind:        item.ItemKind,
-				Direction:       defaultDirection(item.Direction),
-				AmountCent:      item.AmountCent,
-				GiftName:        item.GiftName,
-				GiftValueCent:   item.GiftValueCent,
-				OccurredOn:      occurredOn,
-				DatePrecision:   defaultPrecision(item.DatePrecision),
-				Status:          item.Status,
-				Remark:          item.Remark,
-				PaperNote:       item.PaperNote,
-				PaperPage:       paperPage,
-				PaperSeq:        paperSeq,
-				Source:          consts.RecordSourceRecognize,
-				RecognizeTaskID: &id,
-				Confirm:         true,
-			})
-			if err != nil {
-				return wrapItemError(index, err)
-			}
-			result.RecordIDs = append(result.RecordIDs, created.ID)
-			result.Count++
-			result.SumCent += created.TotalCent
-			for draftIndex := range item.Repays {
-				draft := item.Repays[draftIndex]
-				repayParam := record.RepayParam{
-					OriginIDs:     []uint64{created.ID},
-					Event:         draft.Event,
-					OccurredOn:    draft.OccurredOn,
-					DatePrecision: draft.DatePrecision,
-					PaperNote:     item.PaperNote,
-					Items:         draft.Items,
-					Remark:        "",
-				}
-				repayRecords, err := s.records.RepayInTx(ctx, tx, repayParam)
-				if err != nil {
-					return wrapItemError(index, err)
-				}
-				result.RepayCount += len(repayRecords)
-			}
+	result := &recognize.CommitRecognizeResult{RecordIDs: make([]int64, 0, len(param.Items))}
+	createdPersons := make(map[string]int64)
+	for i, item := range param.Items {
+		resolved, err := s.ensureCommitPerson(ctx, param.OwnerID, item, matched[i], createdPersons)
+		if err != nil {
+			s.log.Error(ctx).Err(err).Int64("taskID", param.ID).Ints64("recordIDs", result.RecordIDs).
+				Msg("commit recognize task stopped")
+			return nil, s.lineError(i, err)
 		}
-		pageTotalCent := int64(0)
-		hasPageTotal := false
-		if param.PageTotalCent != nil {
-			pageTotalCent = *param.PageTotalCent
-			hasPageTotal = true
-		} else if payload := parsePayload(task.Items); payload.PageTotalCent > 0 {
-			pageTotalCent = payload.PageTotalCent
-			hasPageTotal = true
+		if resolved.created {
+			result.NewPersons++
 		}
-		page := param.Page
-		if page == "" {
-			page = parsePayload(task.Items).Page
+		createParam := &record.CreateRecordParam{
+			OwnerID:    param.OwnerID,
+			PersonID:   resolved.personID,
+			BookID:     param.BookID,
+			Direction:  param.Direction,
+			AmountCent: item.AmountCent,
+			Matter:     param.Matter,
+			Note:       item.Note,
+			OccurredOn: param.OccurredOn,
 		}
-		if hasPageTotal && page != "" {
-			bookID := param.BookID
-			if bookID == 0 {
-				bookID = param.Items[0].BookID
-			}
-			if bookID > 0 {
-				if err := s.pages.UpsertPageCheck(tx, ownerID, bookID, page, pageTotalCent); err != nil {
-					return err
-				}
-			}
+		view, err := s.recordSrv.CreateRecord(ctx, createParam)
+		if err != nil {
+			s.log.Error(ctx).Err(err).Int64("taskID", param.ID).Ints64("recordIDs", result.RecordIDs).
+				Msg("commit recognize task stopped")
+			return nil, s.lineError(i, err)
 		}
-		return s.store.MarkCommitted(tx, id)
-	})
-	if err != nil {
+		result.RecordIDs = append(result.RecordIDs, view.ID)
+		result.Count++
+		result.SumCent += view.AmountCent
+	}
+
+	updater := map[string]any{
+		"committed":  consts.TrueString,
+		"updated_at": time.Now().UTC().UnixMilli(),
+	}
+	if err := s.taskDal.UpdateRecognizeTask(ctx, param.ID, updater); err != nil {
+		s.log.Error(ctx).Err(err).Int64("taskID", param.ID).Msg("mark recognize task committed failed")
 		return nil, err
 	}
-	afterPersons, err := s.persons.CountAll(db, ownerID)
-	if err == nil {
-		result.NewPersons = int(afterPersons - beforePersons)
-	}
-	s.log.Info(ctx).Uint64("taskId", id).Int("count", result.Count).Msg("recognize.commit")
+	s.log.Info(ctx).Int64("taskID", param.ID).Int64("count", result.Count).Msg("recognize task committed")
 	return result, nil
 }
 
-// UploadDir 返回原图根目录，供 API 安全拼接文件路径。
-func (s *RecognizeSrv) UploadDir() string {
-	return s.uploadDir
-}
-
-func (s *RecognizeSrv) FailStale(ctx context.Context) error {
-	return s.store.FailStale(s.rdb.Get())
-}
-
-// LoadImage 校验签名并返回原图相对路径；调用方负责限制在 uploadDir 内。
-func (s *RecognizeSrv) LoadImage(ctx context.Context, id uint64, expires int64, sig string) (string, error) {
-	if s.signer == nil {
-		return "", response.New(403, "原图不可访问", "image access denied")
+// FailStaleRecognizeTask 在服务启动时把上次未完成的任务置为失败，提示用户重新上传。
+func (s *RecognizeSrv) FailStaleRecognizeTask(ctx context.Context) error {
+	searchParam := &recognize.SearchRecognizeTaskParam{
+		Statuses: []string{consts.TaskStatusPending, consts.TaskStatusRunning},
 	}
-	task, err := s.store.GetByID(s.rdb.Get(), id)
+	tasks, _, err := s.taskDal.SearchRecognizeTask(ctx, searchParam)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return "", response.NotFound("识别任务不存在")
+		s.log.Error(ctx).Err(err).Msg("search stale recognize tasks failed")
+		return err
+	}
+	now := time.Now().UTC().UnixMilli()
+	for _, task := range tasks {
+		updater := map[string]any{
+			"status":        consts.TaskStatusFailed,
+			"error_message": "服务重启，识别未完成，请重新上传",
+			"finished_at":   now,
+			"updated_at":    now,
 		}
-		return "", err
+		if err := s.taskDal.UpdateRecognizeTask(ctx, task.ID, updater); err != nil {
+			s.log.Error(ctx).Err(err).Int64("taskID", task.ID).Msg("fail stale recognize task failed")
+			return err
+		}
 	}
-	if !s.signer.VerifyImage(id, task.OwnerID, expires, sig) {
-		return "", response.New(403, "原图链接无效或已过期", "invalid image signature")
-	}
-	return task.ImagePath, nil
+	return nil
 }
 
-func (s *RecognizeSrv) buildResp(task *recognize.Task, payload taskPayload) *recognize.Resp {
-	imageURL := ""
-	if s.signer != nil {
-		imageURL = s.signer.SignImage(task.ID, task.OwnerID)
+// runRecognizeTask 在后台 goroutine 执行识别。请求 ctx 在响应后即结束，因此以 Background 为根，
+// 用配置的超时约束总时长；并发数由 sem 限制。
+func (s *RecognizeSrv) runRecognizeTask(task *recognize.RecognizeTask, img Image) {
+	timeout := time.Duration(s.cfg.TimeoutSeconds) * time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	defer func() {
+		if r := recover(); r != nil {
+			s.log.Error(ctx).Int64("taskID", task.ID).Interface("panic", r).Str("stack", string(debug.Stack())).
+				Msg("recognize task panicked")
+		}
+	}()
+
+	s.sem <- struct{}{}
+	defer func() { <-s.sem }()
+
+	runningUpdater := map[string]any{
+		"status":     consts.TaskStatusRunning,
+		"updated_at": time.Now().UTC().UnixMilli(),
 	}
-	return &recognize.Resp{
-		ID:            task.ID,
-		Status:        task.Status,
-		Provider:      task.Provider,
-		Model:         task.Model,
-		ImagePath:     task.ImagePath,
-		ImageURL:      imageURL,
-		ImageSHA256:   task.ImageSHA256,
-		ImageSize:     task.ImageSize,
-		ErrorMessage:  task.ErrorMessage,
-		Committed:     task.Committed,
-		Page:          payload.Page,
-		PageTotalCent: payload.PageTotalCent,
-		SumCent:       payload.SumCent,
-		Items:         payload.Items,
-		CreatedAt:     utils.Millis(task.CreatedAt),
-		FinishedAt:    utils.MillisPtr(task.FinishedAt),
+	if err := s.taskDal.UpdateRecognizeTask(ctx, task.ID, runningUpdater); err != nil {
+		s.log.Error(ctx).Err(err).Int64("taskID", task.ID).Msg("mark recognize task running failed")
+		return
+	}
+
+	start := time.Now()
+	result, err := s.recognizer.Recognize(ctx, img)
+	task.FinishedAt = time.Now().UTC().UnixMilli()
+	if err != nil {
+		s.log.Warn(ctx).Err(err).Int64("taskID", task.ID).Msg("recognize failed")
+		task.Status = consts.TaskStatusFailed
+		task.ErrorMessage = err.Error()
+		if errors.Is(err, context.DeadlineExceeded) {
+			task.ErrorMessage = "识别超时，请重试"
+		}
+		s.saveRecognizeResult(ctx, task)
+		return
+	}
+
+	items, err := s.matchRecognizeItems(ctx, task.OwnerID, result.Items)
+	if err != nil {
+		task.Status = consts.TaskStatusFailed
+		task.ErrorMessage = "识别结果匹配亲友失败，请重试"
+		s.saveRecognizeResult(ctx, task)
+		return
+	}
+	task.Status = consts.TaskStatusSucceeded
+	task.Model = result.Model
+	task.RawResponse = result.Raw
+	task.Items = items
+	s.saveRecognizeResult(ctx, task)
+	s.log.Info(ctx).Int64("taskID", task.ID).Str("model", result.Model).
+		Int64("latencyMs", time.Since(start).Milliseconds()).Int("itemCount", len(items)).
+		Msg("recognize succeeded")
+}
+
+// saveRecognizeResult 整体写回识别结果；items 文本列与合计由 Serialize 派生，因此走 Serialize → Check → ToUpdater。
+func (s *RecognizeSrv) saveRecognizeResult(ctx context.Context, task *recognize.RecognizeTask) {
+	task = task.Serialize()
+	if err := task.Check(); err != nil {
+		s.log.Error(ctx).Err(err).Int64("taskID", task.ID).Msg("check recognize result failed")
+		return
+	}
+	if err := s.taskDal.UpdateRecognizeTask(ctx, task.ID, task.ToUpdater()); err != nil {
+		s.log.Error(ctx).Err(err).Int64("taskID", task.ID).Msg("save recognize result failed")
 	}
 }
 
-func parsePayload(raw string) taskPayload {
-	payload := taskPayload{Items: []recognize.Item{}}
-	if strings.TrimSpace(raw) == "" {
-		return payload
+// matchRecognizeItems 把模型输出转成识别项，金额转分、置信度转百分比，并标出同名亲友。
+func (s *RecognizeSrv) matchRecognizeItems(ctx context.Context, ownerID int64, providerItems []ProviderItem) ([]recognize.RecognizeItem, error) {
+	items := make([]recognize.RecognizeItem, 0, len(providerItems))
+	personsByName, err := s.searchPersonsByName(ctx, ownerID, providerItems)
+	if err != nil {
+		return items, err
 	}
-	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
-		return taskPayload{Items: []recognize.Item{}}
+
+	for i, providerItem := range providerItems {
+		name := strings.TrimSpace(providerItem.Name)
+		item := recognize.RecognizeItem{
+			Seq:        providerItem.Seq,
+			Name:       name,
+			AmountCent: int64(math.Round(providerItem.Amount * 100)),
+			Note:       strings.TrimSpace(providerItem.Note),
+			Raw:        strings.TrimSpace(providerItem.Raw),
+			Confidence: int64(math.Round(math.Max(0, math.Min(1, providerItem.Confidence)) * 100)),
+			Match:      recognize.RecognizeMatch{Status: consts.MatchStatusNone, Candidates: []recognize.RecognizeCandidate{}},
+		}
+		if item.Seq <= 0 {
+			item.Seq = int64(i + 1)
+		}
+		if item.AmountCent < 0 {
+			item.AmountCent = 0
+		}
+		candidates := personsByName[name]
+		for _, row := range candidates {
+			item.Match.Candidates = append(item.Match.Candidates, recognize.RecognizeCandidate{
+				PersonID:     row.ID,
+				PersonName:   row.Name,
+				PersonRemark: row.Remark,
+			})
+		}
+		switch len(candidates) {
+		case 0:
+		case 1:
+			item.Match.Status = consts.MatchStatusSingle
+			item.Match.PersonID = candidates[0].ID
+		default:
+			item.Match.Status = consts.MatchStatusMultiple
+		}
+		items = append(items, item)
 	}
-	if payload.Items == nil {
-		payload.Items = []recognize.Item{}
-	}
-	return payload
+	return items, nil
 }
 
-func commitItemError(index int, field, message string) *response.ErrI18 {
-	err := response.BadRequest(message, message)
-	err.Custom = map[string]any{
-		"itemErrors": []map[string]any{{
-			"index": index, "field": field, "message": message,
-		}},
+// searchPersonsByName 一次查出识别姓名对应的已有亲友；没有可用姓名时不查询，避免 Names 为空退化成全表。
+func (s *RecognizeSrv) searchPersonsByName(ctx context.Context, ownerID int64, providerItems []ProviderItem) (map[string][]*person.Person, error) {
+	personsByName := make(map[string][]*person.Person)
+	names := make([]string, 0, len(providerItems))
+	for _, providerItem := range providerItems {
+		name := strings.TrimSpace(providerItem.Name)
+		if name == "" {
+			continue
+		}
+		names = append(names, name)
 	}
-	return err
+	if len(names) == 0 {
+		return personsByName, nil
+	}
+	searchParam := &person.SearchPersonParam{OwnerID: ownerID, Names: names}
+	persons, _, err := s.personDal.SearchPerson(ctx, searchParam)
+	if err != nil {
+		s.log.Error(ctx).Err(err).Int64("ownerID", ownerID).Msg("search recognize persons failed")
+		return personsByName, err
+	}
+	for _, row := range persons {
+		personsByName[row.Name] = append(personsByName[row.Name], row)
+	}
+	return personsByName, nil
 }
 
-func wrapItemError(index int, err error) error {
+// matchCommitPersons 只读匹配每一行的亲友；返回与 Items 等长的切片，nil 表示需要新建。
+func (s *RecognizeSrv) matchCommitPersons(ctx context.Context, param *recognize.CommitRecognizeTaskParam) ([]*person.Person, error) {
+	matched := make([]*person.Person, 0, len(param.Items))
+	for i, item := range param.Items {
+		matchParam := &person.MatchPersonParam{
+			OwnerID:      param.OwnerID,
+			PersonID:     item.PersonID,
+			PersonName:   item.PersonName,
+			PersonRemark: item.PersonRemark,
+		}
+		row, err := s.personSrv.MatchPerson(ctx, matchParam)
+		if err != nil {
+			return matched, s.lineError(i, err)
+		}
+		matched = append(matched, row)
+	}
+	return matched, nil
+}
+
+// ensureCommitPerson 返回该行要用的亲友 id；同一批次里重复出现的新姓名只建一次。
+func (s *RecognizeSrv) ensureCommitPerson(
+	ctx context.Context,
+	ownerID int64,
+	item recognize.CommitRecognizeItem,
+	matched *person.Person,
+	createdPersons map[string]int64,
+) (*commitPerson, error) {
+	if matched != nil {
+		return &commitPerson{personID: matched.ID}, nil
+	}
+	key := item.PersonName + consts.PersonDisplaySep + item.PersonRemark
+	if personID, ok := createdPersons[key]; ok {
+		return &commitPerson{personID: personID}, nil
+	}
+	createParam := &person.CreatePersonParam{OwnerID: ownerID, Name: item.PersonName, Remark: item.PersonRemark}
+	created, err := s.personSrv.CreatePerson(ctx, createParam)
+	if err != nil {
+		return nil, err
+	}
+	createdPersons[key] = created.ID
+	return &commitPerson{personID: created.ID, created: true}, nil
+}
+
+func (s *RecognizeSrv) checkDailyLimit(ctx context.Context, ownerID int64) error {
+	if s.cfg.DailyLimit <= 0 {
+		return nil
+	}
+	now := time.Now()
+	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	searchParam := &recognize.SearchRecognizeTaskParam{
+		OwnerID:     ownerID,
+		Statuses:    []string{consts.TaskStatusPending, consts.TaskStatusRunning, consts.TaskStatusSucceeded},
+		CreatedFrom: dayStart.UTC().UnixMilli(),
+		Filter:      &modelfilter.Filter{Limit: 1},
+	}
+	_, used, err := s.taskDal.SearchRecognizeTask(ctx, searchParam)
+	if err != nil {
+		s.log.Error(ctx).Err(err).Int64("ownerID", ownerID).Msg("count today recognize tasks failed")
+		return err
+	}
+	if used >= s.cfg.DailyLimit {
+		return response.BadRequest("今天的识别次数已用完", "daily recognition limit reached")
+	}
+	return nil
+}
+
+func (s *RecognizeSrv) checkBook(ctx context.Context, ownerID, bookID int64) error {
+	searchParam := &book.SearchBookParam{OwnerID: ownerID, BookIDs: []int64{bookID}}
+	rows, _, err := s.bookDal.SearchBook(ctx, searchParam)
+	if err != nil {
+		s.log.Error(ctx).Err(err).Int64("bookID", bookID).Msg("search book by id failed")
+		return err
+	}
+	if len(rows) == 0 {
+		return response.BadRequest("礼簿不存在", "book not found")
+	}
+	return nil
+}
+
+func (s *RecognizeSrv) getTask(ctx context.Context, ownerID, taskID int64) (*recognize.RecognizeTask, error) {
+	searchParam := &recognize.SearchRecognizeTaskParam{OwnerID: ownerID, TaskIDs: []int64{taskID}}
+	rows, _, err := s.taskDal.SearchRecognizeTask(ctx, searchParam)
+	if err != nil {
+		s.log.Error(ctx).Err(err).Int64("taskID", taskID).Msg("search recognize task failed")
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, response.NotFound("识别任务不存在", "recognize task not found")
+	}
+	return rows[0], nil
+}
+
+// lineError 给逐行处理的错误加上行号，保留原错误码与 custom。
+func (s *RecognizeSrv) lineError(index int, err error) error {
+	prefix := fmt.Sprintf("第 %d 行：", index+1)
 	var errI18 *response.ErrI18
-	if errors.As(err, &errI18) {
-		message := errI18.Msg
-		if message == "" {
-			message = errI18.Error()
-		}
-		return commitItemError(index, "item", message)
+	if !errors.As(err, &errI18) {
+		return fmt.Errorf("%s%w", prefix, err)
 	}
-	return fmt.Errorf("第 %d 行写入失败: %w", index+1, err)
-}
-
-func defaultDirection(value string) string {
-	if consts.ValidDirection(value) {
-		return value
-	}
-	return consts.DirectionIn
-}
-
-func defaultPrecision(value string) string {
-	if consts.ValidDatePrecision(value) {
-		return value
-	}
-	return consts.DatePrecisionDay
+	wrapped := *errI18
+	wrapped.Msg = prefix + errI18.Msg
+	wrapped.ZH = prefix + errI18.ZH
+	wrapped.EN = fmt.Sprintf("line %d: %s", index+1, errI18.EN)
+	return &wrapped
 }

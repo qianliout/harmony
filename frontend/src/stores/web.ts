@@ -1,10 +1,9 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
-/** 记一笔抽屉的预填上下文。 */
+/** 记一笔抽屉的预填上下文；recordId 为正时是编辑。 */
 export interface EntryContext {
   personId?: number
-  eventId?: number
   bookId?: number
   recordId?: number
 }
@@ -12,17 +11,12 @@ export interface EntryContext {
 export type WebOverlay =
   | { type: 'entry'; context: EntryContext }
   | { type: 'record'; id: number }
-  | { type: 'repay'; originIds: number[] }
-  | { type: 'paperAnno'; id: number }
-  | { type: 'merge'; sourceId?: number }
-  | { type: 'search' }
-  | { type: 'notes' }
 
 export const useWebUiStore = defineStore('webUi', () => {
   const overlay = ref<WebOverlay | null>(null)
   const toastMessage = ref('')
   const revision = ref(0)
-  let toastTimer: number | undefined
+  let toastTimer: ReturnType<typeof setTimeout> | undefined
 
   function openEntry(context: EntryContext = {}): void {
     overlay.value = { type: 'entry', context }
@@ -30,27 +24,6 @@ export const useWebUiStore = defineStore('webUi', () => {
 
   function openRecord(id: number): void {
     overlay.value = { type: 'record', id }
-  }
-
-  function openRepay(originIds: number[]): void {
-    if (!originIds.length) return
-    overlay.value = { type: 'repay', originIds }
-  }
-
-  function openPaperAnno(id: number): void {
-    overlay.value = { type: 'paperAnno', id }
-  }
-
-  function openMerge(sourceId?: number): void {
-    overlay.value = { type: 'merge', sourceId }
-  }
-
-  function openSearch(): void {
-    overlay.value = { type: 'search' }
-  }
-
-  function openNotes(): void {
-    overlay.value = { type: 'notes' }
   }
 
   function close(): void {
@@ -66,23 +39,10 @@ export const useWebUiStore = defineStore('webUi', () => {
     }, 2600)
   }
 
+  /** 任意写操作后递增，页面据此重新加载。 */
   function markChanged(): void {
     revision.value += 1
   }
 
-  return {
-    overlay,
-    toastMessage,
-    revision,
-    openEntry,
-    openRecord,
-    openRepay,
-    openPaperAnno,
-    openMerge,
-    openSearch,
-    openNotes,
-    close,
-    toast,
-    markChanged,
-  }
+  return { overlay, toastMessage, revision, openEntry, openRecord, close, toast, markChanged }
 })

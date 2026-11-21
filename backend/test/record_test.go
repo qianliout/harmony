@@ -1,289 +1,164 @@
 package test
 
 import (
-	"errors"
 	"testing"
 
-	"gorm.io/gorm"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"harmony/infra/consts"
+	modelfilter "harmony/infra/model/filter"
 	"harmony/infra/model/record"
 )
 
-func boolPtr(value bool) *bool { return &value }
-
-// TestDuplicateConfirmation 对应 docs/02「重复提示」：
-// 同人、同事项、同本子、同名目第二次提交 409 need_confirm；带 confirm 成功；换本子直接成功。
-func TestDuplicateConfirmation(t *testing.T) {
+func TestRecordCreate(t *testing.T) {
 	h := newHarness(t)
-	personID := h.createPerson("张三")
-	eventID := h.createEvent("升学宴", "school", "2011-08-20", "day")
-	bookID := h.createBook("人情礼本", "renqing", 0)
-	otherBookID := h.createBook("另一本人情礼", "renqing", 0)
+	personID := h.createPerson("张三", "")
+	bookID := h.createBook("人情礼本", "")
 
-	param := record.CreateParam{
-		PersonID: personID, EventID: eventID, BookID: bookID,
-		AmountCent: 50000, Direction: "in", OccurredOn: "2011-08-20",
-	}
-	h.createRecord(param)
+	incoming := h.createRecord(&record.CreateRecordParam{PersonID: personID, BookID: bookID, Direction: "in", AmountCent: 50000, Matter: "忽略"})
+	assert.Equal(t, bookID, incoming.BookID)
+	assert.Equal(t, "人情礼本", incoming.BookName)
+	assert.Equal(t, "张三", incoming.PersonDisplayName)
+	assert.Empty(t, incoming.Matter, "收礼不记事情")
 
-	_, err := h.recordSrv.Create(h.ctx(), param)
-	errI18 := requireReason(t, err, consts.ReasonNeedConfirm)
-	payload := confirmPayload(t, errI18)
-	if payload.Kind != consts.ConfirmDuplicateRecord {
-		t.Fatalf("expected kind %q, got %q", consts.ConfirmDuplicateRecord, payload.Kind)
-	}
-	if len(payload.Conflicts) != 1 {
-		t.Fatalf("expected 1 conflict, got %d", len(payload.Conflicts))
-	}
+	outgoing := h.createRecord(&record.CreateRecordParam{PersonID: personID, BookID: bookID, Direction: "out", AmountCent: 20000, Matter: "张三升学酒"})
+	assert.Equal(t, int64(0), outgoing.BookID, "送礼不挂礼簿")
+	assert.Equal(t, "张三升学酒", outgoing.Matter)
+}
 
-	confirmed := param
-	confirmed.Confirm = true
-	duplicated := h.createRecord(confirmed)
-	if duplicated.BookID != bookID {
-		t.Fatalf("expected confirmed record in book %d, got %d", bookID, duplicated.BookID)
-	}
+func TestRecordCreateByNameReusesOrCreatesPerson(t *testing.T) {
+	h := newHarness(t)
+	existingID := h.createPerson("张三", "")
+	bookID := h.createBook("人情礼本", "")
 
-	otherBook := param
-	otherBook.BookID = otherBookID
-	direct := h.createRecord(otherBook)
-	if direct.BookID != otherBookID {
-		t.Fatalf("expected direct record in book %d, got %d", otherBookID, direct.BookID)
+	reused := h.createRecord(&record.CreateRecordParam{PersonName: "张三", BookID: bookID, Direction: "in", AmountCent: 100})
+	assert.Equal(t, existingID, reused.PersonID)
+
+	created := h.createRecord(&record.CreateRecordParam{PersonName: "王五", PersonRemark: "表叔", BookID: bookID, Direction: "in", AmountCent: 100})
+	assert.NotEqual(t, existingID, created.PersonID)
+	assert.Equal(t, "王五 · 表叔", created.PersonDisplayName)
+}
+
+func TestRecordCreateErrors(t *testing.T) {
+	cases := []struct {
+		name     string
+		param    *record.CreateRecordParam
+		wantCode int64
+		wantText string
+	}{
+		{name: "incoming without book fails check", param: &record.CreateRecordParam{PersonName: "张三", Direction: "in"}, wantText: "收礼需要选择礼簿"},
+		{name: "negative amount fails check", param: &record.CreateRecordParam{PersonName: "张三", Direction: "out", AmountCent: -1}, wantText: "金额不能为负数"},
+		{name: "bad date fails check", param: &record.CreateRecordParam{PersonName: "张三", Direction: "out", OccurredOn: "2011/1/1"}, wantText: "日期格式"},
+		{name: "unknown book rejected", param: &record.CreateRecordParam{PersonName: "张三", Direction: "in", BookID: 999999}, wantCode: 400},
+		{name: "unknown person id rejected", param: &record.CreateRecordParam{PersonID: 999999, Direction: "out"}, wantCode: 404},
 	}
-	if h.countRecords() != 3 {
-		t.Fatalf("expected 3 records, got %d", h.countRecords())
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newHarness(t)
+			param := tc.param
+			param.OwnerID = consts.LocalOwnerID
+			param = param.Serialize()
+			if tc.wantText != "" {
+				err := param.Check()
+				require.Error(t, err)
+				assert.ErrorContains(t, err, tc.wantText)
+				return
+			}
+			require.NoError(t, param.Check())
+			_, err := h.recordSrv.CreateRecord(h.ctx, param)
+			requireCode(t, err, tc.wantCode, "")
+			assert.Equal(t, int64(0), h.countRecords())
+		})
 	}
 }
 
-// TestRepayManyToOne 对应 docs/02「还礼多对一」：
-// 两笔收礼一次还清 → 1 条送礼记录、2 条关联，两笔收礼都变成已还。
-func TestRepayManyToOne(t *testing.T) {
+func TestRecordSearchAndSummary(t *testing.T) {
 	h := newHarness(t)
-	personID := h.createPerson("张三")
-	eventID := h.createEvent("升学宴", "school", "2011-08-20", "day")
-	bookA := h.createBook("人情礼 A", "renqing", 0)
-	bookB := h.createBook("人情礼 B", "renqing", 0)
+	personA := h.createPerson("张三", "")
+	personB := h.createPerson("李四", "")
+	bookA := h.createBook("人情礼本", "")
+	bookB := h.createBook("火炮本", "huopao")
+	h.createRecord(&record.CreateRecordParam{PersonID: personA, BookID: bookA, Direction: "in", AmountCent: 50000, OccurredOn: "2011-08-20"})
+	h.createRecord(&record.CreateRecordParam{PersonID: personB, BookID: bookB, Direction: "in", AmountCent: 10000, OccurredOn: "2011-09-01"})
+	h.createRecord(&record.CreateRecordParam{PersonID: personA, Direction: "out", AmountCent: 20000, Matter: "李四结婚", OccurredOn: "2011-10-01"})
 
-	first := h.createRecord(record.CreateParam{
-		PersonID: personID, EventID: eventID, BookID: bookA,
-		AmountCent: 30000, Direction: "in", OccurredOn: "2011-08-20",
-	})
-	second := h.createRecord(record.CreateParam{
-		PersonID: personID, EventID: eventID, BookID: bookB,
-		AmountCent: 30000, Direction: "in", OccurredOn: "2011-08-20",
-	})
+	cases := []struct {
+		name      string
+		param     record.SearchRecordParam
+		wantTotal int64
+		wantIn    int64
+		wantOut   int64
+	}{
+		{name: "ledger shows all", wantTotal: 3, wantIn: 60000, wantOut: 20000},
+		{name: "book view only its incoming", param: record.SearchRecordParam{BookID: bookA}, wantTotal: 1, wantIn: 50000},
+		{name: "person view both directions", param: record.SearchRecordParam{PersonID: personA}, wantTotal: 2, wantIn: 50000, wantOut: 20000},
+		{name: "direction filter", param: record.SearchRecordParam{Direction: "out"}, wantTotal: 1, wantOut: 20000},
+		{name: "date range is inclusive", param: record.SearchRecordParam{From: "2011-09-01", To: "2011-10-01"}, wantTotal: 2, wantIn: 10000, wantOut: 20000},
+		{name: "keyword hits person name and matter", param: record.SearchRecordParam{Keyword: "李四"}, wantTotal: 2, wantIn: 10000, wantOut: 20000},
+		{name: "keyword hits pinyin initials", param: record.SearchRecordParam{Keyword: "ls"}, wantTotal: 1, wantIn: 10000},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			searchParam := tc.param
+			searchParam.OwnerID = consts.LocalOwnerID
+			searchParam.Filter = &modelfilter.Filter{Limit: 20}
+			items, total, err := h.recordSrv.SearchRecord(h.ctx, &searchParam)
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantTotal, total)
+			assert.Len(t, items, int(tc.wantTotal))
 
-	result, err := h.recordSrv.Repay(h.ctx(), record.RepayParam{
-		OriginIDs:     []uint64{first.ID, second.ID},
-		OccurredOn:    "2011-09-01",
-		DatePrecision: "day",
-		Items:         []record.RepayItem{{AmountCent: 60000}},
-	})
-	requireOK(t, err)
-	if len(result.Records) != 1 {
-		t.Fatalf("expected 1 repay record, got %d", len(result.Records))
-	}
-	if result.RepayCount != 2 {
-		t.Fatalf("expected 2 links, got %d", result.RepayCount)
-	}
-	if total := h.countRepayLinks(); total != 2 {
-		t.Fatalf("expected 2 stored links, got %d", total)
-	}
-	for _, originID := range []uint64{first.ID, second.ID} {
-		links, err := h.recordStore.LinksByOrigin(h.tx, 1, originID)
-		requireOK(t, err)
-		if len(links) != 1 {
-			t.Fatalf("origin %d: expected 1 link, got %d", originID, len(links))
-		}
-		origin, err := h.recordStore.Get(h.tx, 1, originID)
-		requireOK(t, err)
-		if origin.Status != consts.RecordStatusRepaid {
-			t.Fatalf("origin %d: expected repaid, got %q", originID, origin.Status)
-		}
-	}
-	if result.Records[0].Direction != consts.DirectionOut {
-		t.Fatalf("expected repay direction out, got %q", result.Records[0].Direction)
+			statParam := &record.StatRecordParam{
+				OwnerID:   consts.LocalOwnerID,
+				PersonID:  tc.param.PersonID,
+				BookID:    tc.param.BookID,
+				Direction: tc.param.Direction,
+				From:      tc.param.From,
+				To:        tc.param.To,
+				Keyword:   tc.param.Keyword,
+			}
+			summary, err := h.recordSrv.SummaryRecord(h.ctx, statParam)
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantTotal, summary.Count)
+			assert.Equal(t, tc.wantIn, summary.InCent)
+			assert.Equal(t, tc.wantOut, summary.OutCent)
+		})
 	}
 }
 
-// TestRepayOneToMany 对应 docs/02「还礼一对多」：
-// 一笔收礼分两次还，第一次 markRepaid=false，第二次 true。
-func TestRepayOneToMany(t *testing.T) {
+func TestRecordSearchOrdersByDateDesc(t *testing.T) {
 	h := newHarness(t)
-	personID := h.createPerson("张三")
-	eventID := h.createEvent("升学宴", "school", "2011-08-20", "day")
-	bookID := h.createBook("人情礼本", "renqing", 0)
+	personID := h.createPerson("张三", "")
+	h.createRecord(&record.CreateRecordParam{PersonID: personID, Direction: "out", OccurredOn: "2011-01-01"})
+	h.createRecord(&record.CreateRecordParam{PersonID: personID, Direction: "out", OccurredOn: "2012-01-01"})
 
-	origin := h.createRecord(record.CreateParam{
-		PersonID: personID, EventID: eventID, BookID: bookID,
-		AmountCent: 50000, Direction: "in", OccurredOn: "2011-08-20",
-	})
-
-	first, err := h.recordSrv.Repay(h.ctx(), record.RepayParam{
-		OriginIDs:     []uint64{origin.ID},
-		MarkRepaid:    boolPtr(false),
-		OccurredOn:    "2011-09-01",
-		DatePrecision: "day",
-		Items:         []record.RepayItem{{AmountCent: 20000}},
-	})
-	requireOK(t, err)
-	if len(first.Records) != 1 || first.RepayCount != 1 {
-		t.Fatalf("first repay: records=%d links=%d", len(first.Records), first.RepayCount)
-	}
-	stillPending, err := h.recordStore.Get(h.tx, 1, origin.ID)
-	requireOK(t, err)
-	if stillPending.Status != consts.RecordStatusPending {
-		t.Fatalf("after markRepaid=false: expected pending, got %q", stillPending.Status)
-	}
-
-	second, err := h.recordSrv.Repay(h.ctx(), record.RepayParam{
-		OriginIDs:     []uint64{origin.ID},
-		MarkRepaid:    boolPtr(true),
-		OccurredOn:    "2011-10-01",
-		DatePrecision: "day",
-		Items:         []record.RepayItem{{AmountCent: 30000}},
-	})
-	requireOK(t, err)
-	if len(second.Records) != 1 || second.RepayCount != 1 {
-		t.Fatalf("second repay: records=%d links=%d", len(second.Records), second.RepayCount)
-	}
-	repaid, err := h.recordStore.Get(h.tx, 1, origin.ID)
-	requireOK(t, err)
-	if repaid.Status != consts.RecordStatusRepaid {
-		t.Fatalf("after markRepaid=true: expected repaid, got %q", repaid.Status)
-	}
-	if total := h.countRepayLinks(); total != 2 {
-		t.Fatalf("expected 2 links across two repays, got %d", total)
-	}
+	items, _, err := h.recordSrv.SearchRecord(h.ctx, &record.SearchRecordParam{OwnerID: consts.LocalOwnerID})
+	require.NoError(t, err)
+	require.Len(t, items, 2)
+	assert.Equal(t, "2012-01-01", items[0].OccurredOn)
 }
 
-// TestDeleteProtection 对应 docs/02「删除保护」：
-// 删除被关联的收礼 409 has_reference；删除还礼记录需确认，确认后收礼恢复待还。
-func TestDeleteProtection(t *testing.T) {
+func TestRecordUpdateAndDelete(t *testing.T) {
 	h := newHarness(t)
-	personID := h.createPerson("张三")
-	eventID := h.createEvent("升学宴", "school", "2011-08-20", "day")
-	bookID := h.createBook("人情礼本", "renqing", 0)
+	personID := h.createPerson("张三", "")
+	bookID := h.createBook("人情礼本", "")
+	created := h.createRecord(&record.CreateRecordParam{PersonID: personID, BookID: bookID, Direction: "in", AmountCent: 50000})
 
-	origin := h.createRecord(record.CreateParam{
-		PersonID: personID, EventID: eventID, BookID: bookID,
-		AmountCent: 50000, Direction: "in", OccurredOn: "2011-08-20",
-	})
-	result, err := h.recordSrv.Repay(h.ctx(), record.RepayParam{
-		OriginIDs:     []uint64{origin.ID},
-		OccurredOn:    "2011-09-01",
-		DatePrecision: "day",
-		Items:         []record.RepayItem{{AmountCent: 50000}},
-	})
-	requireOK(t, err)
-	repayID := result.Records[0].ID
+	updateParam := &record.UpdateRecordParam{
+		ID: created.ID, OwnerID: consts.LocalOwnerID, PersonID: personID, BookID: bookID,
+		Direction: "out", AmountCent: 60000, Matter: "回礼", OccurredOn: "2011-08-20",
+	}
+	updateParam = updateParam.Serialize()
+	require.NoError(t, updateParam.Check())
+	updated, err := h.recordSrv.UpdateRecord(h.ctx, updateParam)
+	require.NoError(t, err)
+	assert.Equal(t, int64(60000), updated.AmountCent)
+	assert.Equal(t, "out", updated.Direction)
+	assert.Equal(t, int64(0), updated.BookID, "改成送礼后清空礼簿")
+	assert.Equal(t, "回礼", updated.Matter)
 
-	err = h.recordSrv.Delete(h.ctx(), origin.ID, false)
-	errI18 := requireReason(t, err, consts.ReasonHasReference)
-	if refCount := hasReferenceCount(t, errI18); refCount != 1 {
-		t.Fatalf("expected refCount 1, got %d", refCount)
-	}
-	stillThere, getErr := h.recordStore.Get(h.tx, 1, origin.ID)
-	if getErr != nil {
-		t.Fatalf("origin should still exist: %v", getErr)
-	}
-	if stillThere.Status != consts.RecordStatusRepaid {
-		t.Fatalf("expected origin still repaid, got %q", stillThere.Status)
-	}
-
-	err = h.recordSrv.Delete(h.ctx(), repayID, false)
-	errI18 = requireReason(t, err, consts.ReasonNeedConfirm)
-	payload := confirmPayload(t, errI18)
-	if payload.Kind != consts.ConfirmUnlinkOnDelete {
-		t.Fatalf("expected kind %q, got %q", consts.ConfirmUnlinkOnDelete, payload.Kind)
-	}
-
-	requireOK(t, h.recordSrv.Delete(h.ctx(), repayID, true))
-	if links := h.countRepayLinks(); links != 0 {
-		t.Fatalf("expected links removed, got %d", links)
-	}
-	restored, err := h.recordStore.Get(h.tx, 1, origin.ID)
-	requireOK(t, err)
-	if restored.Status != consts.RecordStatusPending {
-		t.Fatalf("expected origin restored to pending, got %q", restored.Status)
-	}
-	_, err = h.recordStore.Get(h.tx, 1, repayID)
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		t.Fatalf("expected repay record deleted, got %v", err)
-	}
-}
-
-func TestStatusLabelsAndFilters(t *testing.T) {
-	h := newHarness(t)
-	p := h.createPerson("标签人")
-	e := h.createEvent("标签事", "wedding", "2024-02-02", "day")
-	b := h.createBook("标签本", "renqing", 0)
-	in, err := h.recordSrv.Create(h.ctx(), record.CreateParam{
-		PersonID: p, EventID: e, BookID: b, Direction: "in",
-		AmountCent: 10000, OccurredOn: "2024-02-02", DatePrecision: "day", Status: "pending",
-	})
-	requireOK(t, err)
-	if in.StatusLabel != "未回礼" || in.IsRepay {
-		t.Fatalf("unexpected in label %+v", in)
-	}
-	out, err := h.recordSrv.Create(h.ctx(), record.CreateParam{
-		PersonID: p, EventID: e, BookID: b, Direction: "out",
-		AmountCent: 10000, OccurredOn: "2024-02-02", DatePrecision: "day", Status: "pending",
-		Confirm: true,
-	})
-	requireOK(t, err)
-	if out.StatusLabel != "对方未回" {
-		t.Fatalf("unexpected out label %q", out.StatusLabel)
-	}
-	repaid, err := h.recordSrv.Repay(h.ctx(), record.RepayParam{
-		OriginIDs:  []uint64{in.ID},
-		OccurredOn: "2024-03-03",
-		Items:      []record.RepayItem{{BookID: b, ItemKind: "cash", AmountCent: 10000}},
-	})
-	requireOK(t, err)
-	if len(repaid.Records) != 1 || repaid.Records[0].StatusLabel != "回礼" || !repaid.Records[0].IsRepay {
-		t.Fatalf("unexpected repay record %+v", repaid.Records)
-	}
-
-	// 只传 status 时按收礼处理，不能混入送礼记录。
-	list, total, err := h.recordSrv.List(h.ctx(), record.Query{Status: "repaid"}, nil)
-	requireOK(t, err)
-	if total != 1 || len(list) != 1 || list[0].Direction != "in" {
-		t.Fatalf("status filter should imply direction=in, got total=%d %+v", total, list)
-	}
-
-	// 主维度筛选：类别与事项类型。
-	byCategory, total, err := h.recordSrv.List(h.ctx(), record.Query{BookCategory: "renqing"}, nil)
-	requireOK(t, err)
-	if total != 3 || len(byCategory) != 3 {
-		t.Fatalf("category filter got %d records", total)
-	}
-	_, total, err = h.recordSrv.List(h.ctx(), record.Query{EventType: "funeral"}, nil)
-	requireOK(t, err)
-	if total != 0 {
-		t.Fatalf("event type filter should be empty, got %d", total)
-	}
-}
-
-func TestSQLiteDateBoundary(t *testing.T) {
-	h := newHarness(t)
-	p := h.createPerson("边界人")
-	e := h.createEvent("边界事", "other", "2011-10-31", "day")
-	b := h.createBook("边界本", "renqing", 0)
-	_, err := h.recordSrv.Create(h.ctx(), record.CreateParam{
-		PersonID: p, EventID: e, BookID: b, Direction: "in",
-		AmountCent: 5000, OccurredOn: "2011-10-31", DatePrecision: "day", Status: "pending",
-	})
-	requireOK(t, err)
-
-	items, total, err := h.recordSrv.List(h.ctx(), record.Query{To: "2011-10-31"}, nil)
-	requireOK(t, err)
-	if total != 1 || len(items) != 1 {
-		t.Fatalf("to=2011-10-31 should include the record, total=%d", total)
-	}
-	_, total, err = h.recordSrv.List(h.ctx(), record.Query{From: "2011-11-01"}, nil)
-	requireOK(t, err)
-	if total != 0 {
-		t.Fatalf("from=2011-11-01 should exclude the record, total=%d", total)
-	}
+	require.NoError(t, h.recordSrv.DeleteRecord(h.ctx, &record.GetRecordParam{ID: created.ID, OwnerID: consts.LocalOwnerID}))
+	assert.Equal(t, int64(0), h.countRecords())
+	err = h.recordSrv.DeleteRecord(h.ctx, &record.GetRecordParam{ID: created.ID, OwnerID: consts.LocalOwnerID})
+	requireCode(t, err, 404, "")
 }
