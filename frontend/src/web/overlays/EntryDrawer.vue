@@ -53,6 +53,13 @@ const amountCent = computed(() => yuanToCent(form.amountText))
 const upper = computed(() => (amountCent.value > 0 ? centToChinese(amountCent.value) : ''))
 const isNewPerson = computed(() => !form.personId && form.personQuery.trim() !== '')
 
+/** 记一笔选了礼簿时，日期随礼簿带出；编辑已有记录不覆盖记录自己的日期。 */
+function applyBookDate(): void {
+  if (recordId || form.direction !== 'in') return
+  const book = books.value.find((item) => item.id === form.bookId)
+  if (book?.occurredOn) form.date = book.occurredOn
+}
+
 function choosePerson(person: { id: number; name: string; remark: string; displayName?: string }): void {
   form.personId = person.id
   form.personLabel = person.displayName || (person.remark ? `${person.name} · ${person.remark}` : person.name)
@@ -191,9 +198,13 @@ async function remove(): Promise<void> {
 watch(
   () => form.direction,
   (direction) => {
-    if (direction === 'in' && !form.bookId) form.bookId = books.value[0]?.id || 0
+    if (direction !== 'in') return
+    if (!form.bookId) form.bookId = books.value[0]?.id || 0
+    applyBookDate()
   },
 )
+
+watch(() => form.bookId, applyBookDate)
 
 onMounted(() => {
   void load()
@@ -299,6 +310,7 @@ onBeforeUnmount(() => {
           <div class="web-field">
             <label>日期</label>
             <DateField v-model="form.date" />
+            <span v-if="form.direction === 'in'" class="web-field__hint">随礼簿日期自动带出，可修改</span>
           </div>
         </div>
 

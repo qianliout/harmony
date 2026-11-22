@@ -36,6 +36,7 @@ import (
 	"harmony/infra/logger"
 	"harmony/infra/middleware"
 	"harmony/infra/rdb"
+	"harmony/infra/response"
 	"harmony/migrate"
 	"harmony/web"
 
@@ -115,7 +116,7 @@ func runMigrate(args []string, log *logger.Logger) error {
 				return fmt.Errorf("execute schema statement: %w", err)
 			}
 		}
-		return nil
+		return migrate.EnsureColumns(tx)
 	}); err != nil {
 		return err
 	}
@@ -249,21 +250,20 @@ func run(ctx context.Context, log *logger.Logger, cfg *config.Config) error {
 
 // registerH5 托管 make release 复制到 web/dist 的 H5 产物；未构建时只提供 API。
 func registerH5(engine *gin.Engine) {
-	dist, err := fs.Sub(web.Files, "dist")
-	if err != nil {
-		return
+	var fileServer http.Handler
+	if dist, err := fs.Sub(web.Files, "dist"); err == nil {
+		if _, err := fs.Stat(dist, "index.html"); err == nil {
+			fileServer = http.FileServer(http.FS(dist))
+		}
 	}
-	if _, err := fs.Stat(dist, "index.html"); err != nil {
-		engine.GET("/", func(c *gin.Context) {
-			c.String(http.StatusOK, "harmony API is running. Run `make release` to bundle the H5 build, or use `pnpm dev:h5`.")
-		})
-		return
-	}
-	fileServer := http.FileServer(http.FS(dist))
 	engine.NoRoute(func(c *gin.Context) {
 		path := c.Request.URL.Path
 		if strings.HasPrefix(path, "/api/") || strings.HasPrefix(path, "/uploads/") {
-			c.JSON(http.StatusNotFound, gin.H{"code": http.StatusNotFound, "msg": "接口不存在"})
+			response.JSONError(c, response.NotFound("接口不存在", "route not found"))
+			return
+		}
+		if fileServer == nil {
+			c.String(http.StatusOK, "harmony API is running. Run `make release` to bundle the H5 build, or use `pnpm dev:h5`.")
 			return
 		}
 		// H5 使用 hash 路由，静态服务器只需要按文件路径返回资源。

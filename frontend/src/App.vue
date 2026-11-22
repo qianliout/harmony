@@ -1,5 +1,13 @@
 <script setup lang="ts">
 // 应用根组件：承载全局样式；页面由 pages.json 声明，H5 与小程序共用。
+// #ifdef H5
+import { onPageNotFound } from '@dcloudio/uni-app'
+
+// 地址栏里的未知路由回到总账，避免白屏。
+onPageNotFound(() => {
+  uni.reLaunch({ url: '/pages/web/index' })
+})
+// #endif
 </script>
 
 <style lang="scss">

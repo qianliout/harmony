@@ -21,11 +21,11 @@
     {
       "root": "sub-web",
       "pages": [
-        { "path": "people", "style": { "navigationStyle": "custom" } },
-        { "path": "person", "style": { "navigationStyle": "custom" } },
-        { "path": "books", "style": { "navigationStyle": "custom" } },
-        { "path": "book", "style": { "navigationStyle": "custom" } },
-        { "path": "recognize", "style": { "navigationStyle": "custom" } }
+        { "path": "people", "style": { "navigationStyle": "custom", "navigationBarTitleText": "亲友" } },
+        { "path": "person", "style": { "navigationStyle": "custom", "navigationBarTitleText": "亲友详情" } },
+        { "path": "books", "style": { "navigationStyle": "custom", "navigationBarTitleText": "礼簿" } },
+        { "path": "book", "style": { "navigationStyle": "custom", "navigationBarTitleText": "礼簿详情" } },
+        { "path": "recognize", "style": { "navigationStyle": "custom", "navigationBarTitleText": "识别礼簿" } }
       ]
     }
     // #endif

@@ -5,6 +5,8 @@ import { reactive, ref } from 'vue'
 import { createBook, updateBook } from '@/api/book'
 import type { BookItem } from '@/api/types'
 import { bookCategories } from '@/styles/palette'
+import { todayString } from '@/utils/date'
+import DateField from '@/web/components/DateField.vue'
 import Modal from '@/web/components/Modal.vue'
 
 const props = defineProps<{ book: BookItem | null }>()
@@ -16,6 +18,7 @@ const form = reactive({
   name: props.book?.name ?? '',
   category: props.book?.category ?? bookCategories[0].code,
   description: props.book?.description ?? '',
+  occurredOn: props.book?.occurredOn || todayString(),
 })
 
 async function save(): Promise<void> {
@@ -25,7 +28,12 @@ async function save(): Promise<void> {
   }
   saving.value = true
   error.value = ''
-  const params = { name: form.name.trim(), category: form.category.trim(), description: form.description.trim() }
+  const params = {
+    name: form.name.trim(),
+    category: form.category.trim(),
+    description: form.description.trim(),
+    occurredOn: form.occurredOn,
+  }
   try {
     const saved = props.book ? await updateBook(props.book.id, params) : await createBook(params)
     emit('saved', saved)
@@ -54,6 +62,11 @@ async function save(): Promise<void> {
         </datalist>
         <span class="web-field__hint">renqing 人情礼 · huopao 火炮 · other 其他，也可输入自定义种类</span>
       </div>
+    </div>
+    <div class="web-field">
+      <label>日期</label>
+      <DateField v-model="form.occurredOn" />
+      <span class="web-field__hint">这本礼簿对应的日期；记一笔选它时自动带出，可再改。</span>
     </div>
     <div class="web-field">
       <label for="book-desc">备注</label>

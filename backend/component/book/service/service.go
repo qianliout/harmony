@@ -63,6 +63,7 @@ func (s *BookSrv) CreateBook(ctx context.Context, param *book.CreateBookParam) (
 		Name:        param.Name,
 		Category:    param.Category,
 		Description: param.Description,
+		OccurredOn:  param.OccurredOn,
 	}
 	if err := s.bookDal.CreateBook(ctx, row); err != nil {
 		s.log.Error(ctx).Err(err).Int64("ownerID", param.OwnerID).Str("name", param.Name).Msg("createBook failed")
@@ -85,6 +86,7 @@ func (s *BookSrv) UpdateBook(ctx context.Context, param *book.UpdateBookParam) (
 		Name:        param.Name,
 		Category:    param.Category,
 		Description: param.Description,
+		OccurredOn:  param.OccurredOn,
 	}
 	after = after.Serialize()
 	if err := after.Check(); err != nil {
@@ -176,6 +178,7 @@ func (s *BookSrv) toBookViews(rows []*book.Book, stats map[int64]*record.RecordS
 			Category:      row.Category,
 			CategoryLabel: consts.CategoryLabel(row.Category),
 			Description:   row.Description,
+			OccurredOn:    row.OccurredOn,
 			CreatedAt:     row.CreatedAt,
 			UpdatedAt:     row.UpdatedAt,
 		}

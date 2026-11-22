@@ -20,6 +20,7 @@ export interface BookWriteParams {
   name: string
   category: string
   description: string
+  occurredOn: string
 }
 
 export function createBook(params: BookWriteParams): Promise<BookItem> {

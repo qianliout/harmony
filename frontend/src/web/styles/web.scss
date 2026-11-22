@@ -329,16 +329,32 @@ a {
   transition: border-color 0.15s, background 0.15s;
 }
 
+// uni-app H5 把 <textarea> 编译成自定义元素：内部 textarea 绝对定位、高度取外壳的 100%。
+// 外壳必须给确定高度，只写 height: auto 会让输入区高度为 0，点不中也输入不了。
 .web-textarea {
-  height: auto;
+  height: 84px;
   padding: var(--sp-2) var(--sp-3);
-  resize: vertical;
   line-height: 22px;
+
+  .uni-textarea-wrapper,
+  .uni-textarea-textarea {
+    height: 100%;
+  }
+
+  .uni-textarea-textarea {
+    padding: 0;
+    border: 0;
+    outline: none;
+    background: none;
+    resize: none;
+    line-height: inherit;
+  }
 }
 
 .web-input:focus,
 .web-select:focus,
-.web-textarea:focus {
+.web-textarea:focus,
+.web-textarea:focus-within {
   border-color: var(--c-primary);
   background: var(--c-surface);
 }

@@ -6,10 +6,12 @@ release: build-h5 copy-web build-backend
 build-h5:
 	cd frontend && pnpm install && pnpm build:h5
 
+# 保留 .keep：全新克隆未构建 H5 时，go:embed 仍能找到 dist 目录。
 copy-web:
 	rm -rf backend/web/dist
 	mkdir -p backend/web
 	cp -r frontend/dist/build/h5 backend/web/dist
+	touch backend/web/dist/.keep
 
 build-backend:
 	$(MAKE) -C backend build

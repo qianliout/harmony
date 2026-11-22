@@ -34,6 +34,7 @@ const visible = computed(() => new Set(props.columns))
       <thead>
         <tr>
           <th v-if="visible.has('date')">日期</th>
+          <th v-if="visible.has('direction')">方向</th>
           <th v-if="visible.has('person')">亲友</th>
           <th v-if="visible.has('place')">礼簿 / 事情</th>
           <th v-if="visible.has('amount')" class="web-table__r">金额</th>
@@ -44,6 +45,7 @@ const visible = computed(() => new Set(props.columns))
       <tbody>
         <tr v-for="record in records" :key="record.id" class="web-table__row" @click="emit('row', record)">
           <td v-if="visible.has('date')" class="web-sm">{{ formatDate(record.occurredOn) }}</td>
+          <td v-if="visible.has('direction')"><DirTag :direction="record.direction" /></td>
           <td v-if="visible.has('person')" @click.stop>
             <PersonCell
               :id="record.personId"
@@ -58,7 +60,7 @@ const visible = computed(() => new Set(props.columns))
           </td>
           <td v-if="visible.has('amount')" class="web-table__r">
             <div class="record-amount">
-              <DirTag :direction="record.direction" />
+              <DirTag v-if="!visible.has('direction')" :direction="record.direction" />
               <span class="web-amt" :class="`web-amt--${record.direction}`">
                 <Money :cent="record.amountCent" :direction="record.direction" size="s" />
               </span>

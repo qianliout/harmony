@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS book (
   name        TEXT NOT NULL DEFAULT '',
   category    TEXT NOT NULL DEFAULT 'renqing',
   description TEXT NOT NULL DEFAULT '',
+  occurred_on TEXT NOT NULL DEFAULT '',
   created_at  INTEGER NOT NULL DEFAULT 0,
   updated_at  INTEGER NOT NULL DEFAULT 0
 );

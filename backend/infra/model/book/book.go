@@ -22,6 +22,7 @@ type Book struct {
 	Name        string `gorm:"column:name" json:"name"`
 	Category    string `gorm:"column:category" json:"category"`
 	Description string `gorm:"column:description" json:"description"`
+	OccurredOn  string `gorm:"column:occurred_on" json:"occurredOn"`
 
 	CreatedAt int64 `gorm:"autoCreateTime:milli;column:created_at" json:"createdAt"`
 	UpdatedAt int64 `gorm:"autoUpdateTime:milli;column:updated_at" json:"updatedAt"`
@@ -36,8 +37,12 @@ func (vi *Book) Serialize() *Book {
 	vi.Name = strings.TrimSpace(vi.Name)
 	vi.Category = strings.TrimSpace(vi.Category)
 	vi.Description = strings.TrimSpace(vi.Description)
+	vi.OccurredOn = strings.TrimSpace(vi.OccurredOn)
 	if vi.Category == "" {
 		vi.Category = consts.BookCategoryRenqing
+	}
+	if vi.OccurredOn == "" {
+		vi.OccurredOn = utils.DateString(time.Now())
 	}
 	return vi
 }
@@ -67,6 +72,9 @@ func (vi *Book) Check() error {
 	if utf8.RuneCountInString(vi.Category) > consts.BookCategoryMaxLen {
 		return fmt.Errorf("礼簿种类不能超过 %d 个字", consts.BookCategoryMaxLen)
 	}
+	if _, err := utils.ParseDate(vi.OccurredOn); err != nil {
+		return fmt.Errorf("日期格式应为 YYYY-MM-DD")
+	}
 	return nil
 }
 
@@ -76,6 +84,7 @@ func (vi *Book) ToUpdater() map[string]any {
 		"name":        vi.Name,
 		"category":    vi.Category,
 		"description": vi.Description,
+		"occurred_on": vi.OccurredOn,
 		"updated_at":  time.Now().UTC().UnixMilli(),
 	}
 }
@@ -85,6 +94,7 @@ type CreateBookParam struct {
 	Name        string `json:"name"`
 	Category    string `json:"category"`
 	Description string `json:"description"`
+	OccurredOn  string `json:"occurredOn"`
 }
 
 func (p *CreateBookParam) Serialize() *CreateBookParam {
@@ -94,6 +104,10 @@ func (p *CreateBookParam) Serialize() *CreateBookParam {
 	p.Name = strings.TrimSpace(p.Name)
 	p.Category = strings.TrimSpace(p.Category)
 	p.Description = strings.TrimSpace(p.Description)
+	p.OccurredOn = strings.TrimSpace(p.OccurredOn)
+	if p.OccurredOn == "" {
+		p.OccurredOn = utils.DateString(time.Now())
+	}
 	return p
 }
 
@@ -107,6 +121,9 @@ func (p *CreateBookParam) Check() error {
 	if p.Name == "" {
 		return fmt.Errorf("礼簿名称不能为空")
 	}
+	if _, err := utils.ParseDate(p.OccurredOn); err != nil {
+		return fmt.Errorf("日期格式应为 YYYY-MM-DD")
+	}
 	return nil
 }
 
@@ -117,6 +134,7 @@ type UpdateBookParam struct {
 	Name        string `json:"name"`
 	Category    string `json:"category"`
 	Description string `json:"description"`
+	OccurredOn  string `json:"occurredOn"`
 }
 
 func (p *UpdateBookParam) Serialize() *UpdateBookParam {
@@ -126,6 +144,10 @@ func (p *UpdateBookParam) Serialize() *UpdateBookParam {
 	p.Name = strings.TrimSpace(p.Name)
 	p.Category = strings.TrimSpace(p.Category)
 	p.Description = strings.TrimSpace(p.Description)
+	p.OccurredOn = strings.TrimSpace(p.OccurredOn)
+	if p.OccurredOn == "" {
+		p.OccurredOn = utils.DateString(time.Now())
+	}
 	return p
 }
 
@@ -141,6 +163,9 @@ func (p *UpdateBookParam) Check() error {
 	}
 	if p.Name == "" {
 		return fmt.Errorf("礼簿名称不能为空")
+	}
+	if _, err := utils.ParseDate(p.OccurredOn); err != nil {
+		return fmt.Errorf("日期格式应为 YYYY-MM-DD")
 	}
 	return nil
 }
@@ -222,6 +247,7 @@ type BookView struct {
 	Category      string `json:"category"`
 	CategoryLabel string `json:"categoryLabel"`
 	Description   string `json:"description"`
+	OccurredOn    string `json:"occurredOn"`
 	RecordCount   int64  `json:"recordCount"`
 	InCent        int64  `json:"inCent"`
 	CreatedAt     int64  `json:"createdAt"`

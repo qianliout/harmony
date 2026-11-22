@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 
 import { useWebUiStore } from '@/stores/web'
 import EntryDrawer from '@/web/overlays/EntryDrawer.vue'
@@ -25,8 +25,18 @@ useWebHotkeys(
   () => Boolean(root.value?.offsetParent),
 )
 
+// 抽屉状态全局共享，已缓存的页面重新显示时不会再挂载；浏览器前进后退或手改地址时也要关掉。
+function closeOverlay(): void {
+  ui.close()
+}
+
 onMounted(() => {
   ui.close()
+  window.addEventListener('hashchange', closeOverlay)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('hashchange', closeOverlay)
 })
 </script>
 

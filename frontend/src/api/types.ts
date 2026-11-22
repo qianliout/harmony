@@ -42,6 +42,7 @@ export interface BookItem {
   category: string
   categoryLabel: string
   description: string
+  occurredOn: string
   recordCount: number
   inCent: number
   createdAt: number

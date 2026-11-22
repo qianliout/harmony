@@ -120,6 +120,7 @@ onBeforeUnmount(() => {
     <RecordTable
       v-else-if="list.items.value.length"
       :records="list.items.value"
+      :columns="['date', 'direction', 'person', 'place', 'amount', 'note', 'ops']"
       @row="ui.openRecord($event.id)"
       @person="openPerson"
       @edit="editRecord"

@@ -5,6 +5,7 @@ import { onMounted, ref, watch } from 'vue'
 import { deleteBook, fetchBookDetail } from '@/api/book'
 import type { BookItem, RecordItem } from '@/api/types'
 import { useWebUiStore } from '@/stores/web'
+import { formatFullDate } from '@/utils/date'
 import { formatCent } from '@/utils/money'
 import PageHead from '@/web/components/PageHead.vue'
 import Pager from '@/web/components/Pager.vue'
@@ -63,7 +64,7 @@ onMounted(() => {
     <span>{{ detail.error.value }}</span>
   </div>
   <template v-else-if="detail.data.value">
-    <PageHead :title="detail.data.value.name" :meta="`${detail.data.value.categoryLabel}${detail.data.value.description ? ' · ' + detail.data.value.description : ''}`">
+    <PageHead :title="detail.data.value.name" :meta="detail.data.value.categoryLabel">
       <template #tools>
         <button class="web-btn" type="button" @click="dialogOpen = true">
           <WebIcon name="edit" />
@@ -79,6 +80,15 @@ onMounted(() => {
         </button>
       </template>
     </PageHead>
+
+    <div class="web-card book-info">
+      <dl class="web-dl">
+        <dt>日期</dt>
+        <dd>{{ formatFullDate(detail.data.value.occurredOn) || '未填写' }}</dd>
+        <dt>备注</dt>
+        <dd>{{ detail.data.value.description || '—' }}</dd>
+      </dl>
+    </div>
 
     <div class="web-stats">
       <StatCard :value="formatCent(list.summary.value.inCent)" label="收礼合计" tone="in" />
@@ -106,3 +116,9 @@ onMounted(() => {
 
   <BookDialog v-if="dialogOpen" :book="detail.data.value" @close="dialogOpen = false" @saved="onSaved" />
 </template>
+
+<style lang="scss" scoped>
+.book-info {
+  padding: var(--sp-4) var(--sp-5);
+}
+</style>

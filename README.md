@@ -21,6 +21,17 @@
 
 ## 初始化与启动
 
+本机一键部署（构建 H5 与二进制 → migrate → 后台启动 → 健康检查），完成后打开 http://127.0.0.1:8080：
+
+```bash
+./deploy/local.sh                   # 构建并启动；已在运行则先停止
+./deploy/local.sh start --no-build  # 跳过构建，用现有二进制启动
+./deploy/local.sh restart           # 不构建，直接重启
+./deploy/local.sh stop | status | logs
+```
+
+pid 与日志在 `backend/data/harmony.pid`、`backend/data/harmony.log`。开发时分别启动后端与 H5：
+
 ```bash
 make -C backend migrate          # 按 backend/migrate/sqlite/schema.sql 建表，可重复执行
 make -C backend run              # 启动后端
@@ -71,7 +82,7 @@ frontend/src/
 ├── api/                   请求封装与按领域接口
 ├── components/            通用展示组件
 ├── stores/ styles/ utils/
-deploy/                    systemd、Caddy、备份与发布脚本
+deploy/                    本机一键部署 local.sh；服务器用的 systemd、Caddy、备份与发布脚本
 ```
 
 ## API 约定

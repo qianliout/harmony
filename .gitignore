@@ -37,3 +37,6 @@ backend/test/testdata/recognize/*.jpg
 backend/test/testdata/recognize/*.png
 backend/test/testdata/recognize/*.json
 !backend/test/testdata/recognize/README.md
+
+# Playwright MCP 浏览器调试产物
+.playwright-mcp/
